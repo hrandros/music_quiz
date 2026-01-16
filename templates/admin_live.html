@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Kviz UŽIVO 🎤</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #2c3e50; color: white; padding: 20px; }
+        
+        /* NAVIGACIJA */
+        .nav { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 10px; margin-bottom: 20px; display: flex; gap: 20px; align-items: center;}
+        .nav a { color: #bdc3c7; text-decoration: none; font-weight: bold; }
+        .nav a.active { color: #f1c40f; border-bottom: 2px solid #f1c40f; }
+
+        /* TABOVI ZA KRUGOVE */
+        .rounds-bar { display: flex; gap: 10px; margin-bottom: 20px; }
+        .round-tab { 
+            padding: 15px; background: #34495e; color: #bdc3c7; border: none; 
+            cursor: pointer; border-radius: 5px; font-weight: bold; flex: 1; font-size: 1.1em; transition: 0.2s;
+        }
+        .round-tab:hover { background: #46627f; }
+        .round-tab.active-round { background: #f1c40f; color: #2c3e50; transform: translateY(-2px); box-shadow: 0 4px 0 #d35400;}
+
+        /* GLAVNI RASPORED */
+        .dashboard { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; height: 75vh; }
+        
+        /* PLAYLISTA */
+        .playlist-box { background: white; color: #333; border-radius: 10px; overflow-y: auto; padding: 0;}
+        .song-row { 
+            display: flex; justify-content: space-between; align-items: center; 
+            padding: 15px; border-bottom: 1px solid #eee; transition: background 0.2s;
+        }
+        .song-row.hidden-round { display: none !important; } /* Skriva krive krugove */
+        
+        .song-row:hover { background: #f9f9f9; }
+        .song-row.playing { background: #d5f5e3; border-left: 8px solid #2ecc71; }
+        .song-row.revealed { background: #fae5d3; opacity: 0.8; }
+
+        .btn { padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 1em;}
+        .btn-play { background: #27ae60; color: white; width: 100px; }
+        .btn-play:hover { background: #219150; }
+        .btn-reveal { background: #f39c12; color: white; }
+        
+        /* STATUS PLOČA (DESNO) */
+        .status-panel { background: rgba(0,0,0,0.3); padding: 20px; border-radius: 10px; text-align: center; display: flex; flex-direction: column;}
+        
+        /* TABLICA ODGOVORA */
+        .answers-container { 
+            background: white; border-radius: 5px; overflow: hidden; height: 400px; overflow-y: auto; 
+            text-align: left; color: #333;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #34495e; color: white; padding: 10px; font-size: 0.9em; position: sticky; top: 0;}
+        td { padding: 8px 10px; border-bottom: 1px solid #eee; font-size: 1.1em; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        
+        /* Gumbi za reviziju */
+        .btn-correct { background: none; border: 1px solid #2ecc71; color: #2ecc71; cursor: pointer; border-radius: 3px; padding: 2px 8px; font-size: 1.2em; }
+        .btn-wrong { background: none; border: 1px solid #e74c3c; color: #e74c3c; cursor: pointer; border-radius: 3px; padding: 2px 8px; font-size: 1.2em; }
+        
+        .btn-correct:hover, .row-correct .btn-correct { background: #2ecc71; color: white; }
+        .btn-wrong:hover, .row-wrong .btn-wrong { background: #e74c3c; color: white; }
+
+        .row-correct { background: #d5f5e3 !important; }
+        .row-wrong { background: #fadbd8 !important; }
+        
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+
+        .player-list ul { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;}
+        .player-chip { background: #3498db; padding: 8px 15px; border-radius: 20px; font-size: 1em; font-weight: bold;}
+
+        /* Footer s kontrolama */
+        .footer-controls { margin-top: auto; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); }
+        .btn-reset { background: #95a5a6; color: white; width: 100%; padding: 15px; font-size: 1.2em; }
+        .btn-stop { background: #c0392b; color: white; width: 100%; padding: 15px; font-size: 1.2em; margin-bottom: 10px;}
+
+    </style>
+</head>
+<body>
+
+    <div class="nav">
+        <a href="/admin/setup">🛠️ PRIPREMA</a>
+        <a href="/admin/live" class="active">🎤 UŽIVO (LIVE)</a>
+        <div style="margin-left: auto; font-size: 0.9em; color: #bdc3c7;">IP za igrače: <span id="ip-display" style="color:white; font-weight:bold;">...</span></div>
+    </div>
+
+    <div class="rounds-bar">
+        <button class="round-tab active-round" onclick="selectRound(1)">1. Krug</button>
+        <button class="round-tab" onclick="selectRound(2)">2. Krug</button>
+        <button class="round-tab" onclick="selectRound(3)">3. Krug</button>
+        <button class="round-tab" onclick="selectRound(4)">4. Krug</button>
+        <button class="round-tab" onclick="selectRound(5)">5. Krug</button>
+    </div>
+
+    <div class="dashboard">
+        <div class="playlist-box">
+            {% for song in songs %}
+            <div class="song-row" id="row-{{ song.id }}" data-round="{{ song.round }}">
+                <div style="flex: 1;">
+                    <div style="font-weight: bold; font-size: 1.2em;">#{{ song.id }} Pjesma</div>
+                    <div style="color: #7f8c8d; font-size: 0.9em; margin-top: 5px;" id="answer-{{ song.id }}">
+                        (Odgovor skriven)
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <button class="btn btn-play" onclick="playSong({{ song.id }})">▶️ PUSTI</button>
+                    <button class="btn btn-reveal" onclick="reveal({{ song.id }}, '{{ song.artist }}', '{{ song.title }}')">👀</button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="status-panel">
+            <h3>📝 Odgovori Igrača</h3>
+            
+            <div class="footer-controls" style="margin-bottom: 15px; border:none; padding:0;">
+                <button class="btn btn-stop" onclick="stopMusic()">⏹️ STOP</button>
+                <button class="btn btn-reset" onclick="clearAnswers()">🧹 Očisti listu odgovora</button>
+            </div>
+
+            <div class="answers-container">
+                <table id="answersTable">
+                    <thead>
+                        <tr>
+                            <th style="width: 30%">Igrač</th>
+                            <th style="width: 40%">Odgovor</th>
+                            <th style="width: 30%">Revizija</th>
+                        </tr>
+                    </thead>
+                    <tbody id="answersBody">
+                        </tbody>
+                </table>
+            </div>
+
+            <hr style="border-color: rgba(255,255,255,0.1); margin: 20px 0;">
+            
+            <h4>Spojeni igrači:</h4>
+            <div class="player-list">
+                <ul id="players-ul"></ul>
+            </div>
+        </div>
+    </div>
+
+    <audio id="audioPlayer"></audio>
+
+    <script>
+        const socket = io();
+        document.getElementById('ip-display').innerText = location.hostname + ":5000";
+        let currentRound = 1;
+
+        // INICIJALIZACIJA
+        selectRound(1);
+
+        // --- UPRAVLJANJE KRUGOVIMA ---
+        function selectRound(roundNum) {
+            currentRound = roundNum;
+            // 1. Tabovi
+            document.querySelectorAll('.round-tab').forEach((btn, idx) => {
+                if (idx + 1 === roundNum) btn.classList.add('active-round');
+                else btn.classList.remove('active-round');
+            });
+
+            // 2. Pjesme
+            document.querySelectorAll('.song-row').forEach(row => {
+                const rowRound = parseInt(row.getAttribute('data-round'));
+                if (rowRound === roundNum) {
+                    row.classList.remove('hidden-round');
+                } else {
+                    row.classList.add('hidden-round');
+                }
+            });
+        }
+
+        // --- LOGIKA KVIZA ---
+        function playSong(id) {
+            // Vizualno označi
+            document.querySelectorAll('.song-row').forEach(r => r.classList.remove('playing'));
+            document.getElementById('row-'+id).classList.add('playing');
+            
+            // Pošalji signal backendu
+            socket.emit('admin_play_song', {id: id});
+            
+            // Sakrij stari buzzer ako je ostao
+            document.getElementById('buzzer-display').style.display = 'none';
+        }
+
+        function stopMusic() {
+            document.getElementById('audioPlayer').pause();
+            // Ovdje bi mogli poslati i signal igračima da stane, 
+            // ali trenutno playeri stanu samo kad netko bizza.
+            // Ako želiš remote stop, treba dodati socket event.
+            document.getElementById('buzzer-display').style.display = 'none';
+        }
+
+        function reveal(id, artist, title) {
+            // Prikaži odgovor adminu (inline, da ne iskače alert)
+            const ansDiv = document.getElementById('answer-' + id);
+            ansDiv.innerHTML = `<span style="color:#e67e22; font-weight:bold;">${artist} - ${title}</span>`;
+            document.getElementById('row-'+id).classList.add('revealed');
+        }
+
+        function clearAnswers() {
+            document.getElementById('answersBody').innerHTML = "";
+            document.getElementById('audioPlayer').pause();
+        }
+
+        // --- SOCKET LISTENERI ---
+        
+        // Dolazak odgovora s mobitela
+        socket.on('admin_receive_answer', function(data) {
+            const tbody = document.getElementById('answersBody');
+            
+            // Provjeri je li igrač već poslao odgovor (pa ga samo ažuriraj) ili je novi
+            let existingRow = document.getElementById('row-ans-' + data.name);
+            
+            if (existingRow) {
+                // Ažuriraj postojeći
+                existingRow.querySelector('.ans-text').textContent = data.answer;
+                // Resetiraj boje jer je novi odgovor
+                existingRow.className = ''; 
+            } else {
+                // Dodaj novi red
+                const tr = document.createElement('tr');
+                tr.id = 'row-ans-' + data.name;
+                tr.innerHTML = `
+                    <td style="font-weight:bold;">${data.name}</td>
+                    <td class="ans-text">${data.answer}</td>
+                    <td>
+                        <button class="btn-correct" onclick="markAnswer(this, true)">✔</button>
+                        <button class="btn-wrong" onclick="markAnswer(this, false)">✖</button>
+                    </td>
+                `;
+                // Dodaj na VRH tablice (najnoviji prvi)
+                tbody.insertBefore(tr, tbody.firstChild);
+            }
+        });
+
+        function markAnswer(btn, isCorrect) {
+            const row = btn.closest('tr');
+            // Resetiraj klase
+            row.classList.remove('row-correct', 'row-wrong');
+            
+            if (isCorrect) {
+                row.classList.add('row-correct');
+            } else {
+                row.classList.add('row-wrong');
+            }
+        }
+
+
+        socket.on('play_audio', function(data) {
+            // I admin čuje glazbu da zna dokle je došlo
+            const p = document.getElementById('audioPlayer');
+            p.src = '/snippets/' + data.file;
+            p.volume = 0.5; // Malo tiše za admina
+            p.play();
+        });
+
+        socket.on('admin_update_players', function(data) {
+            const ul = document.getElementById('players-ul');
+            // Provjeri jel već postoji da ne dupliramo
+            let exists = false;
+            ul.querySelectorAll('li').forEach(li => {
+                if(li.textContent === data.name) exists = true;
+            });
+            
+            if(!exists) {
+                const li = document.createElement('li');
+                li.className = 'player-chip';
+                li.textContent = data.name;
+                ul.appendChild(li);
+            }
+        });
+    </script>
+</body>
+</html>

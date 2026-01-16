@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Panel</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; padding: 20px; background: #f4f4f9; color: #333; }
+        h1 { text-align: center; color: #2c3e50; }
+        
+        /* Layout */
+        .container { display: flex; gap: 20px; margin-top: 20px; }
+        .column { flex: 1; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); height: 80vh; overflow-y: auto; }
+        
+        /* Stilovi za stavke */
+        .song-item { border-bottom: 1px solid #eee; padding: 10px 0; display: flex; justify-content: space-between; align-items: center; }
+        .song-item:last-child { border-bottom: none; }
+        
+        /* Gumbi */
+        button { padding: 6px 12px; cursor: pointer; border: none; border-radius: 4px; transition: 0.2s; }
+        .btn-play { background: #27ae60; color: white; }
+        .btn-reveal { background: #f39c12; color: white; }
+        .btn-delete { background: #e74c3c; color: white; margin-left: 5px;}
+        .btn-add { background: #3498db; color: white; }
+        button:hover { opacity: 0.8; }
+        
+        /* Postavke box */
+        .settings { background: #fff; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .path { font-family: monospace; background: #eee; padding: 3px 6px; border-radius: 4px; color: #d35400; }
+        
+        /* Inputi za dodavanje */
+        .add-controls input { width: 50px; padding: 4px; margin-right: 5px; }
+        .meta-info { font-size: 0.9em; color: #666; display: flex; flex-direction: column; }
+    </style>
+</head>
+<body>
+    <h1>🎛️ Music Quiz Admin</h1>
+
+    <div class="settings">
+        <div>
+            <strong>Mapa s glazbom:</strong> <span id="currentPath" class="path">{{ current_path }}</span>
+        </div>
+        <button onclick="changeFolder()" style="background:#34495e; color:white;">📂 Promijeni mapu</button>
+    </div>
+
+    <div class="container">
+        <div class="column">
+            <h2>📝 Playlist za Kviz</h2>
+            <div id="quizList">
+                {% for song in songs %}
+                <div class="song-item" id="song-{{ song.id }}">
+                    <div class="meta-info">
+                        <strong>#{{ song.id }} {{ song.artist }}</strong>
+                        <span>{{ song.title }} ({{ song.start_time }}s - {{ song.duration }}s)</span>
+                    </div>
+                    <div>
+                        <button class="btn-play" onclick="playSong({{ song.id }})">▶️</button>
+                        <button class="btn-reveal" onclick="revealAnswer('{{ song.artist }}', '{{ song.title }}')">👀</button>
+                        <button class="btn-delete" onclick="removeSong({{ song.id }})">🗑️</button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="column">
+            <h2>📂 Dostupne Datoteke</h2>
+            <div style="margin-bottom: 10px; padding: 10px; background: #ecf0f1; border-radius: 5px;">
+                <label>Rezanje (default):</label>
+                Start: <input type="number" id="defStart" value="30" style="width:40px">s
+                Trajanje: <input type="number" id="defDur" value="15" style="width:40px">s
+                <button onclick="loadFiles()" style="margin-left:10px;">🔄 Osvježi listu</button>
+            </div>
+            <div id="fileList">
+                <p>Klikni "Osvježi listu" za učitavanje...</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="settings-box" style="background:#e8f8f5; border:1px solid #2ecc71;">
+        <h3>📡 Status Igre</h3>
+        <div id="buzzer-status" style="font-size: 1.5em; font-weight: bold; color: #c0392b; min-height: 30px;">
+            </div>
+        <hr>
+        <h4>Prijavljeni igrači:</h4>
+        <ul id="players-list" style="display: flex; gap: 10px; list-style: none; padding: 0; flex-wrap: wrap;">
+            </ul>
+        <button onclick="resetRound()" style="background:#7f8c8d; margin-top:10px;">🔄 Resetiraj rundu (Otključaj Buzzere)</button>
+    </div>
+
+    <script>
+        const socket = io();
+
+        // --- UPRAVLJANJE MAPOM ---
+        async function changeFolder() {
+            const res = await fetch('/admin/select_folder', { method: 'POST' });
+            const data = await res.json();
+            if (data.status === 'ok') {
+                document.getElementById('currentPath').textContent = data.path;
+                loadFiles(); // Odmah učitaj nove fajlove
+            }
+        }
+
+        // --- UČITAVANJE DATOTEKA ---
+        async function loadFiles() {
+            const listDiv = document.getElementById('fileList');
+            listDiv.innerHTML = 'Učitavanje...';
+            
+            const res = await fetch('/admin/scan_files');
+            const files = await res.json();
+            
+            listDiv.innerHTML = '';
+            files.forEach(file => {
+                const item = document.createElement('div');
+                item.className = 'song-item';
+                item.innerHTML = `
+                    <div class="meta-info">
+                        <strong>${file.artist}</strong>
+                        <span>${file.title}</span>
+                        <small style="font-size:0.8em; color:#999">${file.filename}</small>
+                    </div>
+                    <div class="add-controls">
+                        <button class="btn-add" onclick="addToQuiz('${file.filename}', '${file.artist.replace(/'/g, "\\'")}', '${file.title.replace(/'/g, "\\'")}')">➕ Dodaj</button>
+                    </div>
+                `;
+                listDiv.appendChild(item);
+            });
+        }
+
+        // --- DODAVANJE U KVIZ ---
+        async function addToQuiz(filename, artist, title) {
+            const start = document.getElementById('defStart').value;
+            const duration = document.getElementById('defDur').value;
+            
+            const res = await fetch('/admin/add_song', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    filename: filename,
+                    artist: artist,
+                    title: title,
+                    start_time: start,
+                    duration: duration
+                })
+            });
+            
+            if (res.ok) {
+                location.reload(); // Najlakši način za osvježiti lijevu listu
+            }
+        }
+
+        // --- BRISANJE IZ KVIZA ---
+        async function removeSong(id) {
+            if(!confirm('Obrisati ovu pjesmu iz kviza?')) return;
+            
+            await fetch('/admin/remove_song', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({id: id})
+            });
+            document.getElementById('song-' + id).remove();
+        }
+
+        // --- PLAY & REVEAL ---
+        function playSong(id) {
+            socket.emit('admin_play_song', {id: id});
+        }
+
+        function revealAnswer(artist, title) {
+            alert(`Točan odgovor:\nIzvođač: ${artist}\nPjesma: ${title}`);
+        }
+
+        // Inicijalno učitaj datoteke
+        loadFiles();
+
+        socket.on('admin_update_players', function(data) {
+        const list = document.getElementById('players-list');
+        const li = document.createElement('li');
+        li.style.background = "#3498db";
+        li.style.color = "white";
+        li.style.padding = "5px 10px";
+        li.style.borderRadius = "15px";
+        li.textContent = data.name;
+        list.appendChild(li);
+    });
+
+    socket.on('player_buzzed', function(data) {
+        // Netko se javio! Pokaži to adminu velikim slovima
+        const statusDiv = document.getElementById('buzzer-status');
+        statusDiv.innerHTML = `🚨 JAVIO SE: <span style="font-size:1.5em">${data.name}</span>`;
+        // Zaustavi svoj player ako svira
+        document.getElementById('audioPlayer').pause();
+    });
+
+    function resetRound() {
+        // Ovdje bi trebali poslati signal igračima da im se gumbi opet aktiviraju
+        // Ali za sad samo očistimo admin ekran
+        document.getElementById('buzzer-status').innerHTML = "";
+        // Ovo možeš nadograditi da pošalje emit('reset_buzzers')
+    }
+    </script>
+</body>
+</html>

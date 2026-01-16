@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Igrač - Glazbeni Kviz</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif; background-color: #121212; color: white;
+            text-align: center; padding: 20px; margin: 0; height: 100vh;
+            display: flex; flex-direction: column; align-items: center;
+        }
+
+        /* LOGIN */
+        #login-screen { display: flex; flex-direction: column; width: 100%; max-width: 300px; margin-top: 20vh; }
+        input { 
+            padding: 15px; font-size: 1.2em; border-radius: 10px; border: none; 
+            margin-bottom: 15px; text-align: center; background: #333; color: white;
+            width: 90%; /* Fix za mobitele */
+        }
+        button.login-btn { 
+            padding: 15px; font-size: 1.2em; background: #00d2ff; border: none; 
+            border-radius: 10px; color: #000; font-weight: bold; cursor: pointer; width: 100%;
+        }
+
+        /* GAME */
+        #game-screen { display: none; width: 100%; max-width: 400px; flex-direction: column; gap: 20px; }
+        
+        .status-box { margin-top: 20px; padding: 15px; background: #1e1e1e; border-radius: 15px; border: 1px solid #333; }
+        #player-name-display { color: #00d2ff; font-weight: bold; font-size: 1.2em; }
+
+        /* INPUT ZA ODGOVOR */
+        #answer-input {
+            padding: 20px; font-size: 1.3em; border-radius: 10px; border: 2px solid #00d2ff;
+            background: #222; color: white; text-align: center; width: 90%;
+        }
+        
+        #submit-btn {
+            padding: 20px; font-size: 1.5em; background: #2ecc71; border: none;
+            border-radius: 10px; color: white; font-weight: bold; cursor: pointer; width: 100%;
+            box-shadow: 0 4px 0 #27ae60;
+        }
+        #submit-btn:active { transform: translateY(4px); box-shadow: none; }
+        #submit-btn:disabled { background: #555; box-shadow: none; color: #888; }
+
+        .sent-message { color: #2ecc71; font-size: 1.2em; display: none; font-weight: bold; margin-top: 20px;}
+
+    </style>
+</head>
+<body>
+
+    <div id="login-screen">
+        <h1>🎵 Kviz Prijava</h1>
+        <input type="text" id="username" placeholder="Tvoje Ime / Ekipa" autocomplete="off">
+        <button class="login-btn" onclick="joinGame()">UĐI U IGRU</button>
+    </div>
+
+    <div id="game-screen">
+        <div class="status-box">
+            👤 <span id="player-name-display">Igrač</span>
+            <div id="status-text" style="color:#aaa; font-size:0.9em; margin-top:5px;">Upiši izvođača ili pjesmu...</div>
+        </div>
+
+        <div style="margin-top: 20px;">
+            <input type="text" id="answer-input" placeholder="Tvoj odgovor..." autocomplete="off">
+        </div>
+        
+        <button id="submit-btn" onclick="sendAnswer()">POŠALJI ODGOVOR</button>
+        
+        <div id="sent-msg" class="sent-message">✔ Odgovor poslan!</div>
+    </div>
+
+    <audio id="audioPlayer"></audio>
+
+    <script>
+        const socket = io();
+        let myName = "";
+        const audioPlayer = document.getElementById('audioPlayer');
+
+        function joinGame() {
+            const inputName = document.getElementById('username').value.trim();
+            if (!inputName) { alert("Upiši ime!"); return; }
+            myName = inputName;
+            socket.emit('player_join', {name: myName});
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('game-screen').style.display = 'flex';
+            document.getElementById('player-name-display').textContent = myName;
+            
+            // Audio unlock
+            audioPlayer.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAGZGF0YQQAAAAAAA==";
+            audioPlayer.play().catch(e => {});
+        }
+
+        function sendAnswer() {
+            const input = document.getElementById('answer-input');
+            const answer = input.value.trim();
+            
+            if(!answer) return;
+
+            // Pošalji serveru
+            socket.emit('player_submit_answer', {name: myName, answer: answer});
+            
+            // UI Feedback
+            input.value = '';
+            document.getElementById('sent-msg').style.display = 'block';
+            setTimeout(() => {
+                document.getElementById('sent-msg').style.display = 'none';
+            }, 3000);
+        }
+
+        socket.on('play_audio', function(data) {
+            // Kad krene nova pjesma, očisti status
+            document.getElementById('sent-msg').style.display = 'none';
+            document.getElementById('answer-input').focus(); // Fokusiraj input da odmah pišu
+            
+            audioPlayer.src = '/snippets/' + data.file;
+            audioPlayer.play().catch(e => { 
+                document.getElementById('status-text').innerText = "Klikni na ekran za zvuk!";
+            });
+        });
+    </script>
+</body>
+</html>
