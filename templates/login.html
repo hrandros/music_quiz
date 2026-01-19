@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Admin Login{% endblock %}
+{% block content %}
+<div class="row justify-content-center mt-5">
+    <div class="col-md-4">
+        <div class="card shadow-lg border-danger">
+            <div class="card-header bg-danger text-white text-center fw-bold">
+                <i class="bi bi-shield-lock-fill me-2"></i>ADMIN AREA
+            </div>
+            <div class="card-body bg-black p-4">
+                <form method="POST">
+                    <div class="mb-3">
+                        <label class="text-white mb-2">Lozinka</label>
+                        <input type="password" name="password" class="form-control text-center fs-4 bg-dark text-white border-secondary" autofocus>
+                    </div>
+                    <button type="submit" class="btn btn-danger w-100 fw-bold">ULAZ</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
