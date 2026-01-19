@@ -1,0 +1,132 @@
+/* static/css/main.css - ROCK EDITION */
+
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;700&family=Roboto+Condensed:wght@400;700&display=swap');
+
+:root {
+    /* ROCK PALETA */
+    --mq-bg-body: #0a0a0a;       /* Skoro crna */
+    --mq-bg-card: #141414;       /* Tamno siva */
+    --mq-bg-hover: #222;         /* Hover */
+    
+    --mq-primary: #d32f2f;       /* Krvavo crvena */
+    --mq-primary-hover: #b71c1c; 
+    
+    --mq-accent: #ffeb3b;        /* Električno žuta (za detalje) */
+    --mq-glow: rgba(211, 47, 47, 0.5);
+    
+    --mq-text-main: #eee;
+    --mq-text-muted: #888;
+    
+    --mq-border: 1px solid #333;
+    --mq-border-radius: 2px;     /* Oštriji rubovi za Rock vibe */
+}
+
+body {
+    background-color: var(--mq-bg-body);
+    /* Suptilna tekstura "pozornice" */
+    background-image: radial-gradient(circle at 50% 0%, #2a0a0a, #0a0a0a 60%);
+    font-family: 'Roboto Condensed', sans-serif; /* Industrijski font */
+    color: var(--mq-text-main);
+    overflow-x: hidden;
+}
+
+h1, h2, h3, h4, h5, .navbar-brand, .btn, th {
+    font-family: 'Oswald', sans-serif; /* Rock Poster Font */
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* --- SCROLLBAR --- */
+::-webkit-scrollbar { width: 10px; }
+::-webkit-scrollbar-track { background: #000; }
+::-webkit-scrollbar-thumb { background: #444; border: 1px solid #000; }
+::-webkit-scrollbar-thumb:hover { background: var(--mq-primary); }
+
+/* --- KARTICE (Amp Style) --- */
+.card {
+    background-color: var(--mq-bg-card);
+    border: var(--mq-border);
+    border-radius: var(--mq-border-radius);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+.card-header {
+    background-color: #000;
+    border-bottom: 2px solid var(--mq-primary); /* Crvena linija */
+    color: #fff;
+    font-size: 1rem;
+    padding: 12px 20px;
+}
+
+/* --- GUMBI (Hard Rock) --- */
+.btn {
+    border-radius: 0; /* Kvadratni gumbi */
+    font-weight: 700;
+    border: none;
+    transition: 0.2s;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+}
+
+.btn-primary {
+    background: var(--mq-primary);
+    color: white;
+}
+.btn-primary:hover {
+    background: var(--mq-primary-hover);
+    box-shadow: 0 0 15px var(--mq-glow);
+    transform: scale(1.02);
+}
+
+.btn-outline-light { border: 1px solid #444; color: #ccc; }
+.btn-outline-light:hover { background: #fff; color: #000; }
+
+/* --- TABLICE --- */
+.table { --bs-table-bg: transparent; --bs-table-color: #ddd; }
+.table > :not(caption) > * > * { border-bottom-color: #333; padding: 15px; }
+.table-hover tbody tr:hover { background-color: #1a1a1a; }
+
+/* Statusi pjesama */
+.song-row.playing {
+    background: linear-gradient(90deg, rgba(211, 47, 47, 0.2), transparent) !important;
+    border-left: 4px solid var(--mq-primary);
+}
+.song-row.revealed {
+    color: var(--mq-accent); /* Žuti tekst */
+    opacity: 0.8;
+}
+
+/* --- FORME --- */
+.form-control {
+    background-color: #000;
+    border: 1px solid #444;
+    color: #fff;
+    border-radius: 0;
+    font-family: 'Roboto Condensed', sans-serif;
+}
+.form-control:focus {
+    background-color: #111;
+    border-color: var(--mq-primary);
+    box-shadow: 0 0 0 0.25rem rgba(211, 47, 47, 0.25);
+    color: #fff;
+}
+
+/* --- CUSTOM ELEMENTI --- */
+.text-accent { color: var(--mq-accent) !important; }
+
+/* Pulsirajuća točka za LIVE */
+.pulse-dot {
+    animation: pulse-red 1.5s infinite;
+}
+@keyframes pulse-red {
+    0% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
+    70% { box-shadow: 0 0 0 6px rgba(220, 53, 69, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+}
+
+/* Player Inputi - Veliki */
+.big-input {
+    font-size: 1.5rem;
+    border: 2px solid #333;
+    padding: 15px;
+    background: #000;
+}
