@@ -154,8 +154,17 @@ def stream_song(filename): return send_from_directory(DEFAULT_SONGS_DIR, filenam
 @app.route("/admin/create_quiz", methods=["POST"])
 @login_required
 def create_quiz():
+    data = request.json
+    # Deaktiviraj sve ostale
     Quiz.query.update({Quiz.is_active: False})
-    db.session.add(Quiz(title=request.json.get("title"), is_active=True))
+    
+    # KREIRAJ S DATUMOM
+    new_quiz = Quiz(
+        title=data.get("title", "Novi Kviz"), 
+        date_created=data.get("date", datetime.date.today().strftime("%Y-%m-%d")), # OVO JE BITNO
+        is_active=True
+    )
+    db.session.add(new_quiz)
     db.session.commit()
     return jsonify({"status": "ok"})
 

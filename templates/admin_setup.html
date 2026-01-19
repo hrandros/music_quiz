@@ -9,24 +9,41 @@
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="text-white"><i class="bi bi-tools me-2"></i>SETUP</h2>
-    <button class="btn btn-outline-warning" onclick="SETUP.createNewQuiz()">Novi Kviz</button>
+    <div>
+        <h2 class="text-white mb-0"><i class="bi bi-tools me-2"></i>SETUP</h2>
+        <small class="text-muted">Aktivni kviz: <span class="text-warning fw-bold">{{ quiz.title }}</span> ({{ quiz.date }})</small>
+    </div>
+    <button class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#newQuizModal">
+        <i class="bi bi-plus-lg"></i> Novi Kviz
+    </button>
 </div>
 
 <div class="row">
     <div class="col-md-6">
-        <div class="card mb-3">
-            <div class="card-header bg-danger text-white">1. Odaberi vrstu pitanja</div>
+        <div class="card mb-3 border-secondary">
+            <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
+                <span>1. Dodaj u kviz</span>
+                
+                <select id="targetRound" class="form-select form-select-sm bg-black text-white border-secondary" style="width:auto;">
+                    <option value="1">Runda 1</option>
+                    <option value="2">Runda 2</option>
+                    <option value="3">Runda 3</option>
+                    <option value="4">Runda 4</option>
+                    <option value="5">Runda 5</option>
+                </select>
+            </div>
+            
             <div class="card-body bg-dark">
                 <ul class="nav nav-pills mb-3" id="qTypeTab">
                     <li class="nav-item"><a class="nav-link active" data-bs-toggle="pill" href="#t-std">🎵 Audio</a></li>
                     <li class="nav-item"><a class="nav-link" data-bs-toggle="pill" href="#t-lyr">📜 Lyrics</a></li>
                     <li class="nav-item"><a class="nav-link" data-bs-toggle="pill" href="#t-vis">🖼️ Visual</a></li>
+                    <li class="nav-item"><a class="nav-link" data-bs-toggle="pill" href="#t-msh">🔀 Mashup</a></li>
                 </ul>
                 
                 <div class="tab-content">
                     <div class="tab-pane fade show active" id="t-std">
-                        <small class="text-muted d-block mb-2">Odaberi MP3 iz liste dolje:</small>
+                        <small class="text-muted d-block mb-2">Popis MP3 datoteka iz /songs mape:</small>
                         <div id="fileList" class="list-group" style="max-height:300px; overflow:auto;"></div>
                     </div>
                     <div class="tab-pane fade" id="t-lyr">
@@ -38,33 +55,38 @@
                         <input type="text" id="visualArt" class="form-control mb-2" placeholder="Točan Izvođač">
                         <button class="btn btn-success w-100" onclick="SETUP.addSpecial('visual')">Dodaj Visual Pitanje</button>
                     </div>
-                </div>
-            </div>
-        </div>
-        
-        <div id="previewContainer" class="card bg-black border-info mb-3" style="display:none;">
-            <div class="card-body">
-                <div id="waveform"></div>
-                <div class="mt-2 d-flex justify-content-between">
-                    <button class="btn btn-sm btn-info" id="btnPlayPause">Play/Pause</button>
-                    <button class="btn btn-sm btn-danger" onclick="SETUP.closePreview()">Zatvori</button>
+                    <div class="tab-pane fade" id="t-msh">
+                        <small class="text-muted">Odaberi MP3 iz liste (Audio tab), pa klikni ovdje:</small>
+                        <input type="text" id="msh1" class="form-control mb-2 mt-2" placeholder="Izvođač 1">
+                        <input type="text" id="msh2" class="form-control mb-2" placeholder="Izvođač 2">
+                        <button class="btn btn-success w-100" onclick="SETUP.addSpecial('mashup')">Dodaj Mashup</button>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
     <div class="col-md-6">
-        <div class="card mb-4">
-            <div class="card-header">Trenutni Kviz ({{ quiz.title }})</div>
-            <div class="card-body bg-dark p-0">
-                <table class="table table-dark table-sm mb-0">
+        <div class="card mb-4 border-secondary">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Sadržaj Kviza</span>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-light active" onclick="SETUP.filterView(0, this)">Sve</button>
+                    <button class="btn btn-outline-light" onclick="SETUP.filterView(1, this)">R1</button>
+                    <button class="btn btn-outline-light" onclick="SETUP.filterView(2, this)">R2</button>
+                    <button class="btn btn-outline-light" onclick="SETUP.filterView(3, this)">R3</button>
+                </div>
+            </div>
+            <div class="card-body bg-black p-0" style="height:400px; overflow:auto;">
+                <table class="table table-dark table-sm mb-0 table-hover">
+                    <thead><tr class="text-muted"><th>R#</th><th>Tip</th><th>Sadržaj</th><th></th></tr></thead>
                     <tbody id="currentSongsList">
                         {% for s in quiz.songs %}
-                        <tr data-id="{{ s.id }}">
-                            <td>R{{ s.round_number }}</td>
-                            <td>{{ s.type|upper }}</td>
+                        <tr class="q-row" data-round="{{ s.round_number }}">
+                            <td class="text-warning fw-bold">{{ s.round_number }}</td>
+                            <td><span class="badge bg-secondary">{{ s.type }}</span></td>
                             <td>{{ s.artist }} - {{ s.title }}</td>
-                            <td class="text-end"><button class="btn btn-sm btn-danger" onclick="SETUP.removeSong({{ s.id }})">X</button></td>
+                            <td class="text-end"><button class="btn btn-sm btn-outline-danger border-0" onclick="SETUP.removeSong({{ s.id }})"><i class="bi bi-trash"></i></button></td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -73,27 +95,49 @@
         </div>
 
         <div class="card border-warning">
-            <div class="card-header bg-warning text-dark fw-bold">QR Generator</div>
+            <div class="card-header bg-warning text-dark fw-bold">QR Generator Timova</div>
             <div class="card-body bg-black">
                 <textarea id="teamsInput" class="form-control bg-dark text-white mb-2" rows="3" placeholder="Tim 1&#10;Tim 2..."></textarea>
-                <button class="btn btn-warning w-100" onclick="generateQR()">Printaj Kodove</button>
+                <button class="btn btn-warning w-100" onclick="generateQR()">Generiraj & Printaj</button>
                 <div id="qrPreview" class="d-none"></div>
             </div>
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="newQuizModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content bg-dark text-white border-warning">
+            <div class="modal-header">
+                <h5 class="modal-title">Kreiraj Novi Kviz</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <label class="mb-2">Naziv / Broj kviza:</label>
+                <input type="text" id="newQuizTitle" class="form-control mb-3 bg-black text-white" placeholder="npr. Rock Kviz #255">
+                
+                <label class="mb-2">Datum:</label>
+                <input type="date" id="newQuizDate" class="form-control mb-3 bg-black text-white">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Odustani</button>
+                <button type="button" class="btn btn-warning fw-bold" onclick="SETUP.createNewQuiz()">KREIRAJ</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/admin_setup.js') }}"></script>
 <script>
+// QR Logic (ugrađen u HTML radi jednostavnosti)
 function generateQR() {
     const text = document.getElementById('teamsInput').value;
     const cont = document.getElementById('qrPreview');
     cont.innerHTML = "";
     const ip = location.hostname + ":5000"; 
-    
-    // Style for print
     const style = document.createElement('style');
     style.innerHTML = `@media print { body * { visibility: hidden; } #qrPreview, #qrPreview * { visibility: visible; } #qrPreview { position: absolute; top:0; left:0; width:100%; display:block !important; } .qr-card { display:inline-block; border:1px solid #000; padding:20px; margin:10px; text-align:center; width: 40%; page-break-inside: avoid; } }`;
     document.head.appendChild(style);
@@ -111,5 +155,7 @@ function generateQR() {
     });
     setTimeout(() => window.print(), 500);
 }
+// Set today's date in modal
+document.getElementById('newQuizDate').valueAsDate = new Date();
 </script>
 {% endblock %}
