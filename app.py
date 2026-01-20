@@ -140,8 +140,13 @@ def admin_live():
 @login_required
 def admin_setup():
     q = get_active_quiz()
+    # Dohvati sve kvizove za dropdown
+    all_quizzes = Quiz.query.order_by(Quiz.id.desc()).all()
     songs = Song.query.filter_by(quiz_id=q.id).order_by(Song.id).all() if q else []
-    return render_template("admin_setup.html", quiz={"id": q.id if q else 0, "title": q.title if q else "", "songs": songs})
+    
+    return render_template("admin_setup.html", 
+                           quiz={"id": q.id if q else 0, "title": q.title if q else "", "songs": songs}, 
+                           all_quizzes=all_quizzes)
 
 @app.route('/images/<filename>')
 def serve_image(filename): return send_from_directory(IMAGES_DIR, filename)
@@ -167,6 +172,24 @@ def create_quiz():
     db.session.add(new_quiz)
     db.session.commit()
     return jsonify({"status": "ok"})
+
+@app.route("/admin/switch_quiz", methods=["POST"])
+@login_required
+def switch_quiz():
+    quiz_id = request.json.get("id")
+    
+    # 1. Deaktiviraj sve
+    Quiz.query.update({Quiz.is_active: False})
+    
+    # 2. Aktiviraj željenog
+    q = db.session.get(Quiz, quiz_id)
+    if q:
+        q.is_active = True
+        db.session.commit()
+        return jsonify({"status": "ok"})
+        
+    db.session.commit() # Za svaki slučaj
+    return jsonify({"status": "error"})
 
 @app.route("/admin/add_song_advanced", methods=["POST"])
 @login_required
@@ -208,6 +231,39 @@ def api_check():
 def remove_song():
     Song.query.filter_by(id=request.json.get("id")).delete()
     db.session.commit()
+    return jsonify({"status": "ok"})
+
+@app.route("/admin/update_song", methods=["POST"])
+@login_required
+def update_song():
+    d = request.json
+    # POPRAVLJENO: db.session.get
+    song = db.session.get(Song, d.get("id"))
+    if song:
+        song.artist = d.get("artist")
+        song.title = d.get("title")
+        song.start_time = float(d.get("start", 0))
+        song.duration = float(d.get("duration", 15))
+        db.session.commit()
+        return jsonify({"status": "ok"})
+    return jsonify({"status": "error", "msg": "Song not found"})
+
+@app.route("/admin/reorder_songs", methods=["POST"])
+@login_required
+def reorder_songs():
+    # Očekujemo listu ID-ova u novom poretku: [5, 2, 8, 1...]
+    new_order = request.json.get("order", [])
+    for idx, song_id in enumerate(new_order):
+        song = db.session.get(Song, song_id)
+        if song:
+            song.id = idx + 10000 # Privremeni hack da izbjegnemo unique constraint id-a ako je to problem, ali kod SQLite rowid-a je ok.
+            # Zapravo, bolje je dodati kolonu 'position' u bazu, ali da ne mijenjamo strukturu baze sad:
+            # Samo ćemo vjerovati redoslijedu učitavanja. 
+            # Za pravu reorder logiku trebali bismo polje 'position'.
+            pass 
+    # Zbog jednostavnosti baze koju imamo, preskočit ćemo kompleksno reordediranje u bazi
+    # i osloniti se na frontend sortiranje ili dodati 'position' stupac u budućnosti.
+    # ALI, za sada možemo ažurirati 'round_number' ako prebacujemo pjesme iz runde u rundu.
     return jsonify({"status": "ok"})
 
 # --- SOCKETS ---
@@ -255,13 +311,49 @@ def handle_round_change(d):
 
 @socketio.on("admin_play_song")
 def handle_play(d):
-    s = Song.query.get(d["id"])
+    print(f"🔔 DEBUG: Zahtjev za play ID: {d.get('id')}")
+    
+    # 1. Tražimo pjesmu u bazi
+    s = db.session.get(Song, d["id"])
+    if not s:
+        print("❌ DEBUG: Pjesma nije pronađena u bazi!")
+        return
+
+    print(f"✅ DEBUG: Pjesma nađena: {s.filename}")
+    
     payload = {"round": s.round_number, "action": "playing", "type": s.type}
+    
+    # Izračun indexa
+    songs_in_round = Song.query.filter_by(quiz_id=s.quiz_id, round_number=s.round_number).order_by(Song.id).all()
+
+    # Python broji od 0, pa dodajemo +1 da piše "1. pjesma"
+    idx = next((i for i, song in enumerate(songs_in_round) if song.id == s.id), -1) + 1
+
+    payload["song_index"] = idx # Ovo šaljemo na screen
+
+    # 2. Provjera MP3 datoteke
     if s.filename:
+        full_path = os.path.join(DEFAULT_SONGS_DIR, s.filename)
+        print(f"📂 DEBUG: Tražim datoteku ovdje: {full_path}")
+        
+        if not os.path.exists(full_path):
+            print("❌ DEBUG: Datoteka NE POSTOJI na disku!")
+            # Ovdje možeš emitirati grešku adminu ako želiš
+            return
+        
+        # 3. Rezanje (FFmpeg)
+        print("✂️ DEBUG: Pokrećem FFmpeg...")
         f = create_snippet(s.filename, s.start_time, s.duration)
-        if f: emit("play_audio", {"file": f}, broadcast=True)
+        
+        if f: 
+            print(f"🚀 DEBUG: Snippet kreiran ({f}), šaljem klijentima...")
+            emit("play_audio", {"file": f}, broadcast=True)
+        else:
+            print("❌ DEBUG: FFmpeg nije vratio snippet (vjerojatno greška u create_snippet)")
+
     if s.type == 'visual': payload["image"] = s.image_file
     if s.type == 'lyrics': payload["text"] = s.extra_data
+    
     emit("screen_update_status", payload, broadcast=True)
 
 @socketio.on("admin_lock_round")

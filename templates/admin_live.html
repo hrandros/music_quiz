@@ -32,12 +32,27 @@
 <div class="card" id="playlist-card">
     <div class="card-body p-0 bg-dark" style="height:60vh; overflow:auto;">
         <table class="table table-dark table-hover mb-0">
-            <tbody id="songsTable">
+           <tbody id="songsTable">
                 {% for s in songs %}
-                <tr class="song-row" id="row-{{s.id}}" data-round="{{s.round}}">
-                    <td>{{ s.id }}</td>
-                    <td><span class="badge bg-secondary">{{ s.type }}</span></td>
-                    <td>{{ s.artist }} - {{ s.title }}</td>
+                <tr class="song-row" id="row-{{s.id}}" 
+                    data-round="{{ s.round_number }}" 
+                    data-duration="{{ s.duration }}"
+                    data-artist="{{ s.artist }}" 
+                    data-title="{{ s.title }}">
+                    
+                    <td>{{ loop.index }}</td>
+                    <td>
+                        {% if s.type == 'visual' %} <span class="badge bg-info">VISUAL</span>
+                        {% elif s.type == 'lyrics' %} <span class="badge bg-warning text-dark">LYRICS</span>
+                        {% else %} <span class="badge bg-secondary">AUDIO</span>
+                        {% endif %}
+                        
+                        <span class="badge bg-dark border border-secondary text-muted ms-1">R{{ s.round_number }}</span>
+                    </td>
+                    <td>
+                        <div class="fw-bold text-white">{{ s.artist }}</div>
+                        <div class="small text-muted">{{ s.title }}</div>
+                    </td>
                     <td class="text-end">
                         <button class="btn btn-sm btn-primary" onclick="playSong({{s.id}})">PLAY</button>
                     </td>

@@ -4,23 +4,34 @@ const sfx = {
     lock: new Audio('/static/sfx/lock.mp3')
 };
 
-socket.on('screen_update_status', d => {
-    document.getElementById('roundDisplay').innerText = d.round;
-    const img = document.getElementById('stageImg');
-    const txt = document.getElementById('stageTxt');
-    const def = document.getElementById('defIcon');
-    const ans = document.getElementById('ansKey');
+socket.on('screen_update_status', (data) => {
     
-    img.classList.add('d-none'); txt.classList.add('d-none'); ans.classList.add('d-none'); def.classList.remove('d-none');
+    // Uvijek ažuriraj broj runde
+    const roundText = document.getElementById('roundDisplay');
+    if(roundText) roundText.innerText = `RUNDA ${data.round}`;
+    
+    const songText = document.getElementById('songDisplay');
+    const statusLabel = document.getElementById('statusLabel');
 
-    if(d.type === 'visual') {
-        def.classList.add('d-none'); img.classList.remove('d-none');
-        img.src = '/images/'+d.image;
-        img.classList.add('animate__animated','animate__zoomIn');
-    }
-    if(d.type === 'lyrics') {
-        def.classList.add('d-none'); txt.classList.remove('d-none');
-        txt.innerText = d.text;
+    if (data.action === 'playing') {
+        // --- OVDJE JE PROMJENA ---
+        if(statusLabel) statusLabel.style.visibility = 'visible';
+        
+        if(songText) {
+            // Ispisuje: "1. pjesma", "2. pjesma" itd.
+            songText.innerText = `${data.song_index}. pjesma`;
+            songText.style.color = 'white';
+            songText.style.fontSize = '4rem'; // Povećaj font da se bolje vidi
+        }
+        
+    } else {
+        // Stanje čekanja
+        if(statusLabel) statusLabel.style.visibility = 'hidden';
+        if(songText) {
+            songText.innerText = "ČEKAM...";
+            songText.style.color = '#555';
+            songText.style.fontSize = '3rem';
+        }
     }
 });
 
