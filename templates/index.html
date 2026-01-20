@@ -1,70 +1,20 @@
 {% extends "base.html" %}
-{% block title %}Početna • Rock Quiz{% endblock %}
-
 {% block content %}
-<div class="d-flex flex-column align-items-center justify-content-center py-5">
-    
-    <div class="text-center mb-5 animate__animated animate__fadeInDown">
-        <i class="bi bi-vinyl-fill text-danger display-1 mb-3"></i>
-        <h1 class="display-3 fw-bold text-white" style="font-family: 'Oswald'; text-transform: uppercase; letter-spacing: 3px;">
-            Rock <span class="text-danger">Quiz</span>
-        </h1>
-        <p class="lead text-secondary font-monospace">Ultimate Multimedia Show</p>
-    </div>
-
-    <div class="row g-4 w-100 justify-content-center" style="max-width: 900px;">
-        
-        <div class="col-md-6 col-lg-3">
-            <a href="{{ url_for('admin_setup') }}" class="card h-100 text-decoration-none border-secondary hover-scale bg-dark">
-                <div class="card-body text-center py-4 text-white">
-                    <i class="bi bi-tools fs-1 text-info mb-3 d-block"></i>
-                    <h5 class="fw-bold font-family-oswald">SETUP</h5>
-                    <small class="text-muted">Priprema pjesama i QR kodova</small>
-                </div>
+<div class="text-center py-5">
+    <h1 class="display-1 fw-bold mb-5 animate__animated animate__pulse animate__infinite">READY TO ROCK?</h1>
+    <div class="row g-4 justify-content-center">
+        <div class="col-md-5">
+            <a href="/player" class="card p-5 h-100 text-decoration-none border-success border-4">
+                <i class="bi bi-person-bounding-box display-1 text-success mb-3"></i>
+                <h2 class="text-white">PRIDRUŽI SE KAO TIM</h2>
             </a>
         </div>
-
-        <div class="col-md-6 col-lg-3">
-            <a href="{{ url_for('admin_live') }}" class="card h-100 text-decoration-none border-danger hover-scale bg-dark">
-                <div class="card-body text-center py-4 text-white">
-                    <i class="bi bi-broadcast fs-1 text-danger mb-3 d-block"></i>
-                    <h5 class="fw-bold font-family-oswald">LIVE STUDIO</h5>
-                    <small class="text-muted">DJ pult i ocjenjivanje</small>
-                </div>
+        <div class="col-md-5">
+            <a href="/login" class="card p-5 h-100 text-decoration-none border-danger border-4">
+                <i class="bi bi-shield-lock display-1 text-danger mb-3"></i>
+                <h2 class="text-white">VODI KVIZ (ADMIN)</h2>
             </a>
         </div>
-
-        <div class="col-md-6 col-lg-3">
-            <a href="{{ url_for('screen') }}" target="_blank" class="card h-100 text-decoration-none border-warning hover-scale bg-dark">
-                <div class="card-body text-center py-4 text-white">
-                    <i class="bi bi-tv fs-1 text-warning mb-3 d-block"></i>
-                    <h5 class="fw-bold font-family-oswald">BIG SCREEN</h5>
-                    <small class="text-muted">Prikaz za publiku na TV-u</small>
-                </div>
-            </a>
-        </div>
-
-        <div class="col-md-6 col-lg-3">
-            <a href="{{ url_for('player') }}" target="_blank" class="card h-100 text-decoration-none border-success hover-scale bg-dark">
-                <div class="card-body text-center py-4 text-white">
-                    <i class="bi bi-phone fs-1 text-success mb-3 d-block"></i>
-                    <h5 class="fw-bold font-family-oswald">PLAYER</h5>
-                    <small class="text-muted">Ulaz za natjecatelje</small>
-                </div>
-            </a>
-        </div>
-
-    </div>
-
-    <div class="mt-5 text-secondary font-monospace small">
-        <i class="bi bi-hdd-network me-2"></i>Server running on local network
     </div>
 </div>
-
-<style>
-    /* Malo hover efekta samo za index stranicu */
-    .hover-scale { transition: transform 0.2s, border-color 0.2s; }
-    .hover-scale:hover { transform: translateY(-5px); border-color: #fff !important; background: #222; }
-    .font-family-oswald { font-family: 'Oswald', sans-serif; letter-spacing: 1px; }
-</style>
 {% endblock %}
