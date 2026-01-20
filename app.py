@@ -4,7 +4,6 @@ import datetime
 import socket
 import requests
 import subprocess
-import json
 from functools import wraps
 from flask import Flask, render_template, request, jsonify, send_from_directory, session, redirect, url_for, flash
 from flask_socketio import SocketIO, emit
@@ -140,13 +139,8 @@ def admin_live():
 @login_required
 def admin_setup():
     q = get_active_quiz()
-    # Dohvati sve kvizove za dropdown
-    all_quizzes = Quiz.query.order_by(Quiz.id.desc()).all()
     songs = Song.query.filter_by(quiz_id=q.id).order_by(Song.id).all() if q else []
-    
-    return render_template("admin_setup.html", 
-                           quiz={"id": q.id if q else 0, "title": q.title if q else "", "songs": songs}, 
-                           all_quizzes=all_quizzes)
+    return render_template("admin_setup.html", quiz={"id": q.id if q else 0, "title": q.title if q else "", "songs": songs})
 
 @app.route('/images/<filename>')
 def serve_image(filename): return send_from_directory(IMAGES_DIR, filename)
@@ -159,37 +153,10 @@ def stream_song(filename): return send_from_directory(DEFAULT_SONGS_DIR, filenam
 @app.route("/admin/create_quiz", methods=["POST"])
 @login_required
 def create_quiz():
-    data = request.json
-    # Deaktiviraj sve ostale
     Quiz.query.update({Quiz.is_active: False})
-    
-    # KREIRAJ S DATUMOM
-    new_quiz = Quiz(
-        title=data.get("title", "Novi Kviz"), 
-        date_created=data.get("date", datetime.date.today().strftime("%Y-%m-%d")), # OVO JE BITNO
-        is_active=True
-    )
-    db.session.add(new_quiz)
+    db.session.add(Quiz(title=request.json.get("title"), is_active=True))
     db.session.commit()
     return jsonify({"status": "ok"})
-
-@app.route("/admin/switch_quiz", methods=["POST"])
-@login_required
-def switch_quiz():
-    quiz_id = request.json.get("id")
-    
-    # 1. Deaktiviraj sve
-    Quiz.query.update({Quiz.is_active: False})
-    
-    # 2. Aktiviraj željenog
-    q = db.session.get(Quiz, quiz_id)
-    if q:
-        q.is_active = True
-        db.session.commit()
-        return jsonify({"status": "ok"})
-        
-    db.session.commit() # Za svaki slučaj
-    return jsonify({"status": "error"})
 
 @app.route("/admin/add_song_advanced", methods=["POST"])
 @login_required
@@ -233,39 +200,6 @@ def remove_song():
     db.session.commit()
     return jsonify({"status": "ok"})
 
-@app.route("/admin/update_song", methods=["POST"])
-@login_required
-def update_song():
-    d = request.json
-    # POPRAVLJENO: db.session.get
-    song = db.session.get(Song, d.get("id"))
-    if song:
-        song.artist = d.get("artist")
-        song.title = d.get("title")
-        song.start_time = float(d.get("start", 0))
-        song.duration = float(d.get("duration", 15))
-        db.session.commit()
-        return jsonify({"status": "ok"})
-    return jsonify({"status": "error", "msg": "Song not found"})
-
-@app.route("/admin/reorder_songs", methods=["POST"])
-@login_required
-def reorder_songs():
-    # Očekujemo listu ID-ova u novom poretku: [5, 2, 8, 1...]
-    new_order = request.json.get("order", [])
-    for idx, song_id in enumerate(new_order):
-        song = db.session.get(Song, song_id)
-        if song:
-            song.id = idx + 10000 # Privremeni hack da izbjegnemo unique constraint id-a ako je to problem, ali kod SQLite rowid-a je ok.
-            # Zapravo, bolje je dodati kolonu 'position' u bazu, ali da ne mijenjamo strukturu baze sad:
-            # Samo ćemo vjerovati redoslijedu učitavanja. 
-            # Za pravu reorder logiku trebali bismo polje 'position'.
-            pass 
-    # Zbog jednostavnosti baze koju imamo, preskočit ćemo kompleksno reordediranje u bazi
-    # i osloniti se na frontend sortiranje ili dodati 'position' stupac u budućnosti.
-    # ALI, za sada možemo ažurirati 'round_number' ako prebacujemo pjesme iz runde u rundu.
-    return jsonify({"status": "ok"})
-
 # --- SOCKETS ---
 @socketio.on("player_join")
 def handle_join(d):
@@ -277,18 +211,12 @@ def handle_join(d):
         emit("join_error", {"msg": "Krivi PIN!"}, to=request.sid); return
     db.session.commit()
     emit("join_success", {"name": p.name}, to=request.sid)
-    
-    # Send current round config to player so they can build the sheet
-    # Assuming we know current round from context or default to 1
-    # For robust solution, admin should emit 'round_start' but we can send data for all songs in active quiz
-    # Here we just notify admin
     all_scores = {pl.name: pl.score for pl in Player.query.all()}
     emit("update_leaderboard", all_scores, broadcast=True)
     emit("admin_update_players", {"name": p.name, "score": p.score}, broadcast=True)
 
 @socketio.on("player_update_answer")
 def handle_draft(d):
-    # Draft save
     ans = Answer.query.filter_by(player_name=d["name"], song_id=d["song_id"]).first()
     if not ans:
         ans = Answer(player_name=d["name"], round_number=d["round"], song_id=d["song_id"])
@@ -302,58 +230,20 @@ def handle_draft(d):
 @socketio.on("admin_change_round")
 def handle_round_change(d):
     q = get_active_quiz()
-    # Get songs for this round to send config to players
     songs = Song.query.filter_by(quiz_id=q.id, round_number=d["round"]).order_by(Song.id).all()
     config = [{"id": s.id, "type": s.type, "extra": s.extra_data} for s in songs]
-    
     emit("screen_update_status", {"round": d["round"], "action": "round_change"}, broadcast=True)
     emit("player_round_config", {"round": d["round"], "songs": config}, broadcast=True)
 
 @socketio.on("admin_play_song")
 def handle_play(d):
-    print(f"🔔 DEBUG: Zahtjev za play ID: {d.get('id')}")
-    
-    # 1. Tražimo pjesmu u bazi
-    s = db.session.get(Song, d["id"])
-    if not s:
-        print("❌ DEBUG: Pjesma nije pronađena u bazi!")
-        return
-
-    print(f"✅ DEBUG: Pjesma nađena: {s.filename}")
-    
+    s = Song.query.get(d["id"])
     payload = {"round": s.round_number, "action": "playing", "type": s.type}
-    
-    # Izračun indexa
-    songs_in_round = Song.query.filter_by(quiz_id=s.quiz_id, round_number=s.round_number).order_by(Song.id).all()
-
-    # Python broji od 0, pa dodajemo +1 da piše "1. pjesma"
-    idx = next((i for i, song in enumerate(songs_in_round) if song.id == s.id), -1) + 1
-
-    payload["song_index"] = idx # Ovo šaljemo na screen
-
-    # 2. Provjera MP3 datoteke
     if s.filename:
-        full_path = os.path.join(DEFAULT_SONGS_DIR, s.filename)
-        print(f"📂 DEBUG: Tražim datoteku ovdje: {full_path}")
-        
-        if not os.path.exists(full_path):
-            print("❌ DEBUG: Datoteka NE POSTOJI na disku!")
-            # Ovdje možeš emitirati grešku adminu ako želiš
-            return
-        
-        # 3. Rezanje (FFmpeg)
-        print("✂️ DEBUG: Pokrećem FFmpeg...")
         f = create_snippet(s.filename, s.start_time, s.duration)
-        
-        if f: 
-            print(f"🚀 DEBUG: Snippet kreiran ({f}), šaljem klijentima...")
-            emit("play_audio", {"file": f}, broadcast=True)
-        else:
-            print("❌ DEBUG: FFmpeg nije vratio snippet (vjerojatno greška u create_snippet)")
-
+        if f: emit("play_audio", {"file": f}, broadcast=True)
     if s.type == 'visual': payload["image"] = s.image_file
     if s.type == 'lyrics': payload["text"] = s.extra_data
-    
     emit("screen_update_status", payload, broadcast=True)
 
 @socketio.on("admin_lock_round")
@@ -362,8 +252,6 @@ def lock_round(d):
     q = get_active_quiz()
     songs = Song.query.filter_by(quiz_id=q.id, round_number=r).all()
     correct = {s.id: s for s in songs}
-    
-    # Auto grade
     answers = Answer.query.filter_by(round_number=r).all()
     for a in answers:
         a.is_locked = True
@@ -372,15 +260,10 @@ def lock_round(d):
             if a.artist_points == 0: a.artist_points = calculate_similarity(a.artist_guess, c.artist)
             if a.title_points == 0: a.title_points = calculate_similarity(a.title_guess, c.title)
     db.session.commit()
-    
-    # Recalc scores
     for p in Player.query.all():
         p.score = sum([x.artist_points + x.title_points + x.extra_points for x in Answer.query.filter_by(player_name=p.name).all()])
     db.session.commit()
-
     emit("round_locked", {"round": r}, broadcast=True)
-    
-    # Send grading data to admin
     g_data = []
     answers = Answer.query.filter_by(round_number=r).all()
     for a in answers:
@@ -392,8 +275,6 @@ def lock_round(d):
             "c_artist": c.artist if c else "?", "c_title": c.title if c else "?"
         })
     emit("admin_grading_data", g_data, broadcast=True)
-    
-    # Show answers on screen
     s_data = [{"artist": s.artist, "title": s.title} for s in songs]
     emit("screen_show_answers", {"round": r, "answers": s_data}, broadcast=True)
 
@@ -404,21 +285,29 @@ def grade(d):
         if "artist_pts" in d: a.artist_points = d["artist_pts"]
         if "title_pts" in d: a.title_points = d["title_pts"]
         db.session.commit()
-        # Update player score
         p = Player.query.filter_by(name=a.player_name).first()
         p.score = sum([x.artist_points + x.title_points for x in Answer.query.filter_by(player_name=p.name).all()])
         db.session.commit()
-        # Emit individual feedback to player
         emit("grade_update", {"song_id": a.song_id, "artist_pts": a.artist_points, "title_pts": a.title_points}, broadcast=True)
-        # Emit leaderboard
         emit("update_leaderboard", {pl.name: pl.score for pl in Player.query.all()}, broadcast=True)
+
+@socketio.on("admin_confirm_player_score")
+def confirm_player_score(data):
+    player_name = data.get("player")
+    round_num = data.get("round")
+    emit("player_score_confirmed", {
+        "player": player_name,
+        "round": round_num
+    }, broadcast=True)
+    all_scores = {pl.name: pl.score for pl in Player.query.all()}
+    emit("update_leaderboard", all_scores, broadcast=True)
 
 @socketio.on("player_activity_status")
 def anti_cheat(d): emit("admin_player_status_change", d, broadcast=True)
 @socketio.on("admin_connect")
 def adm_con(): emit("update_leaderboard", {pl.name: pl.score for pl in Player.query.all()})
 
-if __name__ == "__main__":
+if __name__ == "_main_":
     ip = socket.gethostbyname(socket.gethostname())
     print(f"ROCK QUIZ READY ON {ip}:5000")
     socketio.run(app, host="0.0.0.0", port=5000)
