@@ -1,5 +1,31 @@
 {% extends "base.html" %}
 {% block title %}LIVE • Rock Quiz{% endblock %}
+{% block nav %}
+<div class="container">
+    <a class="navbar-brand fw-bold text-white" href="{{ url_for('index') }}" style="font-family: 'Oswald'; font-size: 1.5rem; letter-spacing: 1px;">
+        <i class="bi bi-lightning-charge-fill text-danger me-1"></i> ROCK<span class="text-danger">QUIZ</span>
+    </a>
+    
+    <button class="navbar-toggler border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navContent">
+        <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div id="navContent" class="collapse navbar-collapse">
+        <ul class="navbar-nav ms-auto gap-2 text-uppercase fw-bold" style="font-family: 'Oswald';">
+            <li class="nav-item ms-lg-3">
+                <a class="btn btn-sm btn-outline-light rounded-0 px-3" href="{{ url_for('admin_setup') }}" target="_blank">
+                    <i class="bi bi-phone me-1"></i> Setup
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="btn btn-sm btn-danger rounded-0 px-3" href="{{ url_for('screen') }}" target="_blank">
+                    <i class="bi bi-tv me-1"></i> TV Screen
+                </a>
+            </li>
+        </ul>
+    </div>
+</div>
+{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h2 class="text-white">LIVE <span class="text-danger">●</span></h2>
@@ -15,7 +41,7 @@
 
 <div class="d-flex gap-2 mb-3">
     {% for i in range(1, 6) %}
-    <button class="btn btn-outline-light round-tab" onclick="selectRound({{i}})">Runda {{i}}</button>
+    <button class="btn btn-outline-light round-tab" onclick="selectRound('{{i}}')">Runda {{i}}</button>
     {% endfor %}
 </div>
 
@@ -54,7 +80,7 @@
                         <div class="small text-muted">{{ s.title }}</div>
                     </td>
                     <td class="text-end">
-                        <button class="btn btn-sm btn-primary" onclick="playSong({{s.id}})">PLAY</button>
+                        <button class="btn btn-sm btn-primary" onclick="playSong('{{s.id}}')">PLAY</button>
                     </td>
                 </tr>
                 {% endfor %}

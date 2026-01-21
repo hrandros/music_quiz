@@ -1,4 +1,4 @@
-/* static/js/admin_setup.js - FIXED WAVESURFER V7 */
+/* static/js/admin_setup.js - NO FFMPEG VERSION */
 
 const SETUP = {};
 let wavesurfer = null;
@@ -6,14 +6,15 @@ let wsRegions = null;
 let currentEditingId = null;
 
 document.addEventListener("DOMContentLoaded", () => {
-    // Pokušaj inicijalizirati odmah
+    // Inicijaliziraj WaveSurfer odmah
     try {
         SETUP.initWaveSurfer();
     } catch (e) {
         console.error("WaveSurfer init error:", e);
     }
     
-    SETUP.loadFiles();
+    // Ako imaš API za listanje fajlova, odkomentiraj ovo
+    // SETUP.loadFiles();
     
     // Sortable Init (Drag & Drop)
     const el = document.getElementById('quizSongsList');
@@ -28,17 +29,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 });
 
-// --- WAVESURFER INIT (AŽURIRANO: Time & Volume) ---
+// --- WAVESURFER INIT ---
 SETUP.initWaveSurfer = function() {
     if(typeof WaveSurfer === 'undefined') return;
     
-    // Uništi stari ako postoji
     if (wavesurfer) {
         wavesurfer.destroy();
         wavesurfer = null;
     }
 
-    // Kreiraj instancu
     wavesurfer = WaveSurfer.create({
         container: "#waveform",
         waveColor: '#666',
@@ -46,32 +45,36 @@ SETUP.initWaveSurfer = function() {
         cursorColor: '#fff',
         height: 100,
         normalize: true,
+        // Bitno: MediaElement backend je bolji za velike fajlove
         backend: 'MediaElement'
     });
 
-    // --- 1. AŽURIRANJE TRENUTNOG VREMENA ---
+    // Prikaz trenutnog vremena
     wavesurfer.on('timeupdate', (currentTime) => {
         const lbl = document.getElementById('lblCurrent');
         if(lbl) lbl.innerText = currentTime.toFixed(1) + 's';
     });
     
-    // Promjena ikone play/pause kad završi ili pauzira
-    wavesurfer.on('play', () => { document.querySelector('#btnPlayPause i').className = 'bi bi-pause-fill'; });
-    wavesurfer.on('pause', () => { document.querySelector('#btnPlayPause i').className = 'bi bi-play-fill'; });
+    // Ikone play/pause
+    wavesurfer.on('play', () => { 
+        const i = document.querySelector('#btnPlayPause i');
+        if(i) i.className = 'bi bi-pause-fill'; 
+    });
+    wavesurfer.on('pause', () => { 
+        const i = document.querySelector('#btnPlayPause i');
+        if(i) i.className = 'bi bi-play-fill'; 
+    });
 
-    // --- 2. KONTROLA GLASNOĆE ---
+    // Kontrola glasnoće
     const volSlider = document.getElementById('wsVolume');
     if(volSlider) {
-        // Postavi početnu glasnoću na max (ili koliko je slider)
         wavesurfer.setVolume(volSlider.value);
-        
-        // Slušaj promjene
         volSlider.oninput = function() {
             wavesurfer.setVolume(this.value);
         };
     }
 
-    // Dodaj Regions plugin
+    // Regions plugin (za odabir start/end vremena)
     if (window.WaveSurfer.Regions) {
         wsRegions = wavesurfer.registerPlugin(window.WaveSurfer.Regions.create());
         
@@ -82,7 +85,6 @@ SETUP.initWaveSurfer = function() {
             if(d) d.innerText = (region.end - region.start).toFixed(1);
         });
         
-        // Kad klikneš na regiju, postavi vrijeme playera na početak regije
         wsRegions.on('region-clicked', (region, e) => {
             e.stopPropagation();
             region.play();
@@ -101,21 +103,11 @@ SETUP.openEditor = function(id, filename, artist, title, start, dur) {
         return;
     }
 
-    // SIGURNOSNA PROVJERA: Je li wavesurfer živ?
-    if (!wavesurfer) {
-        console.log("WaveSurfer nije aktivan, pokušavam ponovno inicijalizirati...");
-        SETUP.initWaveSurfer();
-        
-        // Ako i dalje ne radi (npr. skripta se nije učitala s interneta)
-        if (!wavesurfer) {
-            alert("Greška: WaveSurfer biblioteka nije učitana. Provjeri internet vezu i osvježi stranicu.");
-            return;
-        }
-    }
+    if (!wavesurfer) SETUP.initWaveSurfer();
 
     currentEditingId = id;
     
-    // UI
+    // UI Prikaz
     const panel = document.getElementById('editorPanel');
     if(panel) panel.style.display = 'block';
     
@@ -123,33 +115,33 @@ SETUP.openEditor = function(id, filename, artist, title, start, dur) {
     document.getElementById('editArtist').value = artist;
     document.getElementById('editTitle').value = title;
     
-    // Označi red
+    // Označi red u tablici
     document.querySelectorAll('.q-row').forEach(r => r.classList.remove('editing-row'));
     const row = document.getElementById('qrow-'+id);
     if(row) row.classList.add('editing-row');
 
-    // Učitaj audio
-    // Dodajemo timestamp da izbjegnemo browser cache ako se fajl promijenio
-    wavesurfer.load('/stream_song/' + filename + '?t=' + new Date().getTime());
+    // Učitaj audio: Koristimo rutu /stream_song/ + filename
+    wavesurfer.load('/stream_song/' + filename);
     
-    // Postavi regiju kad je spreman
     wavesurfer.once('ready', () => {
         if(wsRegions) {
             wsRegions.clearRegions();
+            // Kreiraj regiju na temelju spremljenih podataka
             wsRegions.addRegion({
-                start: start,
-                end: start + dur,
+                start: parseFloat(start),
+                end: parseFloat(start) + parseFloat(dur),
                 color: "rgba(211, 47, 47, 0.4)",
                 drag: true,
                 resize: true
             });
+            // Skoči na početak regije
+            wavesurfer.setTime(parseFloat(start));
         }
     });
     
-    // Error handling za load
     wavesurfer.once('error', (e) => {
         console.error("WaveSurfer error:", e);
-        alert("Ne mogu učitati pjesmu. Provjeri je li datoteka u mapi 'songs'.");
+        alert("Ne mogu učitati pjesmu: " + filename);
     });
 };
 
@@ -175,7 +167,12 @@ SETUP.saveChanges = async function() {
         }
     }
 
-    const res = await fetch("/admin/update_song", {
+    // Pozivamo API za update (ako ga nemaš u pythonu, moraš ga dodati!)
+    // Pretpostavljam da koristiš /admin/add_song_advanced ili slično za update, 
+    // ili trebaš dodati novu rutu /admin/update_song u python.
+    
+    // Ovdje pretpostavljam da ruta za update postoji (ako ne, javi da dodamo u python)
+    const res = await fetch("/admin/update_song", { // <--- PAZI: Imaš li ovu rutu u pythonu?
         method: "POST", headers: {"Content-Type": "application/json"},
         body: JSON.stringify({
             id: currentEditingId,
@@ -186,103 +183,19 @@ SETUP.saveChanges = async function() {
         })
     });
     
-    const data = await res.json();
-    if(data.status === 'ok') location.reload();
-    else alert("Greška pri spremanju!");
-};
-
-
-// --- OSTALE FUNKCIJE ---
-
-SETUP.loadFiles = async function() {
-    const res = await fetch("/admin/scan_files");
-    const files = await res.json();
-    const c = document.getElementById("fileList");
-    if(!c) return;
-
-    c.innerHTML = "";
-    files.forEach(f => {
-        c.innerHTML += `
-        <div class="d-flex justify-content-between bg-black p-2 mb-1 border-bottom border-secondary text-white small song-item" 
-             onclick="selectFile(this, '${f.filename}')">
-            <span class="text-truncate" style="max-width:200px;" title="${f.filename}">${f.filename}</span>
-            <div>
-                <button class="btn btn-xs btn-outline-info me-1" onclick="event.stopPropagation(); SETUP.magic('${f.filename}')">🪄</button>
-                <button class="btn btn-xs btn-success" onclick="event.stopPropagation(); SETUP.addToQuiz('${f.filename}','standard')">+</button>
-            </div>
-        </div>`;
-    });
-};
-
-// Selektiranje za mashup
-let selectedFilename = null;
-window.selectFile = function(el, fn) {
-    document.querySelectorAll('.song-item').forEach(e => e.classList.remove('bg-primary'));
-    el.classList.add('bg-primary');
-    selectedFilename = fn;
-}
-
-SETUP.magic = async function (fn) {
-    const btn = event.currentTarget; // Visual feedback
-    const oldHtml = btn.innerHTML;
-    btn.innerHTML = "⌛";
+    // Ako nemaš update rutu, možeš koristiti remove pa add, ali to mijenja ID.
+    // Najbolje je dodati rutu u python.
     
     try {
-        const res = await fetch("/admin/api_check_song", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ filename: fn })
-        });
-        const d = await res.json();
-        if (d.found && confirm(`Nađen: ${d.artist} - ${d.title}.\nDodati?`)) {
-            SETUP.addToQuiz(fn, 'standard', d.artist, d.title);
-        } else if (!d.found) alert("Nije pronađeno.");
-    } catch(e) { console.error(e); }
-    
-    btn.innerHTML = oldHtml;
-};
-
-SETUP.addToQuiz = async function (fn, type, art = "", tit = "", extra = "") {
-    const r = document.getElementById('targetRound') ? document.getElementById('targetRound').value : 1;
-    await fetch("/admin/add_song_advanced", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename: fn, type, artist: art, title: tit, extra_data: extra, round: r })
-    });
-    location.reload();
-};
-
-SETUP.addSpecial = async function (type) {
-    const r = document.getElementById('targetRound').value;
-
-    if (type === 'visual') {
-        const f = document.getElementById('visualFile').files[0];
-        const art = document.getElementById('visualArt').value;
-        if (!f) return alert("Odaberi sliku!");
-
-        const fd = new FormData(); fd.append('file', f);
-        const res = await fetch('/admin/upload_image', { method: 'POST', body: fd });
         const data = await res.json();
-
-        await fetch("/admin/add_song_advanced", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type: 'visual', image_file: data.filename, artist: art, title: 'Visual Round', round: r })
-        });
-        location.reload();
-    }
-    
-    if (type === 'lyrics') {
-        const txt = document.getElementById('lyricText').value;
-        if(!txt) return alert("Upiši tekst!");
-        SETUP.addToQuiz(null, 'lyrics', '', 'Lyrics Challenge', txt);
-    }
-
-    if (type === 'mashup') {
-        if(!selectedFilename) return alert("Prvo klikni na MP3 pjesmu u Audio listi lijevo!");
-        const a1 = document.getElementById('msh1').value;
-        const a2 = document.getElementById('msh2').value;
-        // Za mashup koristimo selectedFilename
-        SETUP.addToQuiz(selectedFilename, 'mashup', a1, 'Mashup', a2);
+        if(data.status === 'ok') location.reload();
+        else alert("Greška pri spremanju!");
+    } catch(e) {
+        alert("Greška: Provjeri postoji li ruta /admin/update_song u pythonu.");
     }
 };
+
+// --- UPRAVLJANJE PJESMAMA ---
 
 SETUP.removeSong = async function (id) {
     if(!confirm("Obrisati?")) return;
@@ -295,28 +208,11 @@ SETUP.removeSong = async function (id) {
 
 SETUP.createNewQuiz = async function () {
     const t = document.getElementById('newQuizTitle').value;
-    const d = document.getElementById('newQuizDate').value;
     if(!t) return alert("Upiši naziv!");
     await fetch("/admin/create_quiz", {
         method: "POST", headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ title: t, date: d })
+        body: JSON.stringify({ title: t })
     });
-    location.reload();
-};
-
-SETUP.switchQuiz = async function(id) {
-    if(id == 0) return;
-    
-    // Pokaži loading (opcionalno)
-    document.getElementById('quizSwitcher').disabled = true;
-
-    await fetch("/admin/switch_quiz", {
-        method: "POST", 
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: id })
-    });
-    
-    // Osvježi stranicu da se učitaju pjesme tog kviza
     location.reload();
 };
 
@@ -326,4 +222,90 @@ SETUP.filterView = function(round, btn) {
     document.querySelectorAll('.q-row').forEach(row => {
         row.style.display = (round === 0 || parseInt(row.dataset.round) === round) ? 'table-row' : 'none';
     });
+};
+
+SETUP.scanFolder = async function() {
+    const pathInput = document.getElementById('localFolderPath');
+    const path = pathInput.value.trim();
+    const listContainer = document.getElementById('repoFileList');
+    
+    if(!path) {
+        alert("Molimo unesite putanju do mape!");
+        return;
+    }
+
+    listContainer.innerHTML = '<div class="text-white text-center p-2"><div class="spinner-border spinner-border-sm"></div> Tražim...</div>';
+
+    try {
+        const res = await fetch("/admin/scan_local_folder", {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ path: path })
+        });
+        const data = await res.json();
+        
+        if(data.status === 'error') {
+            listContainer.innerHTML = `<div class="text-danger p-2 small">${data.msg}</div>`;
+            return;
+        }
+
+        if(data.files.length === 0) {
+            listContainer.innerHTML = `<div class="text-warning p-2 small">Nema MP3 datoteka u ovoj mapi.</div>`;
+            return;
+        }
+
+        // Renderiraj listu
+        let html = '';
+        data.files.forEach(f => {
+            // Putanja + ime fajla (pazimo na slash/backslash ovisno o OS-u, ali za import šaljemo oboje)
+            // Koristimo path iz inputa kao base
+            const fullPath = path.endsWith('\\') || path.endsWith('/') ? path + f : path + '/' + f;
+            
+            html += `
+            <div class="d-flex justify-content-between align-items-center bg-black p-2 mb-1 border-bottom border-secondary text-white small">
+                <span class="text-truncate me-2" title="${f}">${f}</span>
+                <button class="btn btn-xs btn-success" onclick="SETUP.importSong('${fullPath.replace(/\\/g, '\\\\')}', '${f}')">
+                    <i class="bi bi-plus-lg"></i>
+                </button>
+            </div>`;
+        });
+        listContainer.innerHTML = html;
+
+    } catch(e) {
+        console.error(e);
+        listContainer.innerHTML = `<div class="text-danger p-2 small">Greška pri skeniranju.</div>`;
+    }
+};
+
+SETUP.importSong = async function(fullPath, filename) {
+    const r = document.getElementById('targetRound') ? document.getElementById('targetRound').value : 1;
+    const btn = event.currentTarget;
+    const originalContent = btn.innerHTML;
+    
+    btn.disabled = true;
+    btn.innerHTML = '<div class="spinner-border spinner-border-sm"></div>';
+
+    try {
+        const res = await fetch("/admin/import_external_song", {
+            method: "POST", headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ 
+                source_path: fullPath,
+                filename: filename,
+                round: r
+            })
+        });
+        const data = await res.json();
+        
+        if(data.status === 'ok') {
+            // Refresh stranice da se vidi nova pjesma u kvizu
+            location.reload();
+        } else {
+            alert("Greška: " + data.msg);
+            btn.innerHTML = originalContent;
+            btn.disabled = false;
+        }
+    } catch(e) {
+        alert("Greška pri komunikaciji sa serverom.");
+        btn.innerHTML = originalContent;
+        btn.disabled = false;
+    }
 };

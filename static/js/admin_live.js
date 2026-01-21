@@ -1,5 +1,3 @@
-/* static/js/admin_live.js - FINAL VERSION */
-
 const socket = io();
 
 // --- GLOBALNE VARIJABLE ---
@@ -7,45 +5,53 @@ let currentRound = 1;
 let autoPlayActive = false;
 let playQueue = [];
 let currentQueueIndex = 0;
-let autoplayTimeout = null;
+let autoplayTimeout = null;   // Timer za sljedeću pjesmu u redu
+let audioStopTimer = null;    // Timer za zaustavljanje trenutne pjesme (NOVO)
 
 // --- SOCKET LISTENERS ---
-
-// 1. KLJUČNO: Slušaj kad server pošalje audio datoteku (OVO JE FALILO)
 socket.on('play_audio', (data) => {
+    // data = { url: "...", start: 45.0, duration: 15.0 }
     const audio = document.getElementById('audioPlayer');
+    
+    // Resetiraj timer za gašenje ako svira prethodna
+    if (audioStopTimer) clearTimeout(audioStopTimer);
+
     if (audio) {
-        // Timestamp sprječava cacheiranje stare pjesme
-        audio.src = '/snippets/' + data.file + '?t=' + new Date().getTime();
+        audio.src = data.url; // Učitaj cijelu pjesmu
         
-        const vol = document.getElementById('vol');
-        if (vol) audio.volume = vol.value;
-        
-        audio.play().catch(error => {
-            console.error("Autoplay blokiran:", error);
-        });
+        // Čekamo da browser učita podatke o trajanju da možemo skočiti
+        audio.onloadedmetadata = function() {
+            audio.currentTime = data.start; // Skoči na početak isječka
+            
+            const vol = document.getElementById('vol');
+            if (vol) audio.volume = vol.value;
+            
+            audio.play().then(() => {
+                // Postavi timer da stane nakon 'duration' sekundi
+                audioStopTimer = setTimeout(() => {
+                    audio.pause();
+                }, data.duration * 1000);
+            }).catch(error => {
+                console.error("Greška pri reprodukciji:", error);
+            });
+        };
     }
 });
 
-// 2. Prikaz ocjenjivanja
 socket.on('admin_grading_data', (data) => {
     document.getElementById('playlist-card').style.display = 'none';
     document.getElementById('grading-view').style.display = 'block';
     renderGradingTable(data);
 });
 
-// 3. Status igrača
 socket.on('admin_player_status_change', (d) => {
     console.log(`Player ${d.name} is ${d.status}`);
 });
 
 // --- FUNKCIJE ZA UPRAVLJANJE RUNDAMA ---
-
 function selectRound(r) {
     currentRound = r;
     console.log("Selecting Round:", r);
-
-    // 1. Ažuriraj gumbe
     document.querySelectorAll('.round-tab').forEach((btn, i) => {
         if (i + 1 == r) {
             btn.classList.add('active', 'btn-danger');
@@ -55,42 +61,33 @@ function selectRound(r) {
             btn.classList.add('btn-outline-light');
         }
     });
-
-    // 2. Filtriraj tablicu
     const rows = document.querySelectorAll('.song-row');
-    let found = 0;
-
     rows.forEach(row => {
         const rowRound = row.getAttribute('data-round');
         if (rowRound == r) {
             row.style.display = 'table-row';
             row.classList.remove('hidden-round');
-            found++;
         } else {
             row.style.display = 'none';
             row.classList.add('hidden-round');
         }
     });
-    
-    // Javi serveru
     socket.emit('admin_change_round', {round: r});
 }
 
 // --- AUDIO PLAYER LOGIKA ---
-
 function playSong(id) {
-    // Resetiraj vizualni stil
+    // UI Update (highlight reda)
     document.querySelectorAll('.song-row').forEach(row => {
         row.classList.remove('table-active', 'border-warning', 'border-3');
         row.style.opacity = "1";
     });
-
-    // Označi red
     const row = document.getElementById('row-' + id);
     if (row) {
         row.classList.add('table-active', 'border-warning', 'border-3');
         row.scrollIntoView({ behavior: 'smooth', block: 'center' });
         
+        // Ažuriraj "Currently Playing" na ekranu admina
         const artist = row.getAttribute('data-artist');
         const title = row.getAttribute('data-title');
         const djElem = document.getElementById('dj-console');
@@ -100,39 +97,36 @@ function playSong(id) {
             document.getElementById('np-title').innerText = title;
         }
     }
-
-    // Pošalji zahtjev
+    // Šaljemo zahtjev serveru -> server vraća 'play_audio' event
     socket.emit('admin_play_song', {id: parseInt(id)});
 }
 
 function stopMusic() {
-    clearTimeout(autoplayTimeout);
+    // Očisti sve timere
+    if (autoplayTimeout) clearTimeout(autoplayTimeout);
+    if (audioStopTimer) clearTimeout(audioStopTimer);
+
     autoPlayActive = false;
     
+    // UI update gumba
     const btn = document.getElementById('btn-autoplay');
     if(btn) {
         btn.classList.replace('btn-danger', 'btn-outline-danger');
         btn.innerHTML = '<i class="bi bi-collection-play"></i> AUTOPLAY';
     }
-
+    
+    // Stvarna pauza audio playera
     const audio = document.getElementById('audioPlayer');
     if(audio) audio.pause();
 }
 
 // --- AUTOPLAY LOGIKA ---
-
 function toggleAutoplay() {
-    // TRIK ZA BROWSER: Odmah aktiviraj audio context
-    const audio = document.getElementById('audioPlayer');
-    if(audio) {
-        audio.play().catch(() => {}); 
-        audio.pause();
-    }
-    
     autoPlayActive = !autoPlayActive;
     const btn = document.getElementById('btn-autoplay');
     
     if (autoPlayActive) {
+        // Start Autoplay
         btn.classList.replace('btn-outline-danger', 'btn-danger');
         btn.innerHTML = '<i class="bi bi-stop-circle-fill"></i> STOP AUTOPLAY';
         
@@ -141,26 +135,27 @@ function toggleAutoplay() {
         
         if(visibleRows.length === 0) {
             alert("Nema pjesama u ovoj rundi!");
-            toggleAutoplay();
+            toggleAutoplay(); // Ugasi odmah
             return;
         }
-
+        
         visibleRows.forEach(row => {
             const id = row.id.replace('row-', '');
             playQueue.push(id);
         });
-
+        
         currentQueueIndex = 0;
         playNextInQueue();
 
     } else {
+        // Stop Autoplay
         stopMusic();
     }
 }
 
 function playNextInQueue() {
     if (!autoPlayActive) return;
-
+    
     if (currentQueueIndex >= playQueue.length) {
         stopMusic();
         alert("Kraj runde! Pokrećem timer...");
@@ -171,18 +166,21 @@ function playNextInQueue() {
     const songId = playQueue[currentQueueIndex];
     const row = document.getElementById('row-' + songId);
     
+    // Dohvati trajanje iz HTML atributa (mora se podudarati s bazom)
     let duration = 15;
     if (row && row.getAttribute('data-duration')) {
         const d = parseFloat(row.getAttribute('data-duration'));
         if(!isNaN(d) && d > 0) duration = d;
     }
 
-    playSong(songId);
+    playSong(songId); // Ovo pokreće audio
     currentQueueIndex++;
 
+    // Čekaj trajanje pjesme + 5 sekundi pauze prije sljedeće
     const waitTime = (duration * 1000) + 5000;
     
-    clearTimeout(autoplayTimeout);
+    if (autoplayTimeout) clearTimeout(autoplayTimeout);
+    
     autoplayTimeout = setTimeout(() => {
         if(autoPlayActive) {
             playNextInQueue();
@@ -191,15 +189,13 @@ function playNextInQueue() {
 }
 
 // --- TIMER I GRADING ---
-
 function startTimer() {
     socket.emit('admin_start_timer', {sec: 60});
-    
     let sec = 60;
     const btn = document.querySelector('button[onclick="startTimer()"]');
     const originalText = btn.innerHTML;
-    
     btn.disabled = true;
+    
     const interval = setInterval(() => {
         sec--;
         btn.innerHTML = `<i class="bi bi-hourglass-split"></i> ${sec}s`;
@@ -218,6 +214,7 @@ function renderGradingTable(data) {
     const tb = document.getElementById('gradingBody');
     tb.innerHTML = "";
     data.forEach(d => {
+        // Generiranje HTML-a tablice ocjenjivanja
         tb.innerHTML += `<tr>
             <td class="text-white fw-bold">${d.player}</td>
             <td>
@@ -251,7 +248,6 @@ function rate(p, sid, field, val) {
 // INICIJALIZACIJA
 document.addEventListener("DOMContentLoaded", () => {
     selectRound(1);
-    
     const vol = document.getElementById('vol');
     if(vol) {
         vol.oninput = function() {

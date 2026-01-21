@@ -1,5 +1,12 @@
 {% extends "base.html" %}
 {% block title %}Player{% endblock %}
+{% block nav %}
+<div class="container">
+    <a class="navbar-brand fw-bold text-white" href="{{ url_for('index') }}" style="font-family: 'Oswald'; font-size: 1.5rem; letter-spacing: 1px;">
+        <i class="bi bi-lightning-charge-fill text-danger me-1"></i> ROCK<span class="text-danger">QUIZ</span>
+    </a>
+</div>
+{% endblock %}
 {% block content %}
 <div class="container" style="max-width:500px;">
     

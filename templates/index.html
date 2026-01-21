@@ -1,4 +1,11 @@
 {% extends "base.html" %}
+{% block nav %}
+<div class="container">
+    <a class="navbar-brand fw-bold text-white" href="{{ url_for('index') }}" style="font-family: 'Oswald'; font-size: 1.5rem; letter-spacing: 1px;">
+        <i class="bi bi-lightning-charge-fill text-danger me-1"></i> ROCK<span class="text-danger">QUIZ</span>
+    </a>
+</div>
+{% endblock %}
 {% block content %}
 <div class="text-center py-5">
     <h1 class="display-1 fw-bold mb-5 animate__animated animate__pulse animate__infinite">READY TO ROCK?</h1>

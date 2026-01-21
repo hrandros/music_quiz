@@ -2,14 +2,13 @@ import os
 import sys
 import datetime
 import socket
-import requests
-import subprocess
 from functools import wraps
 from flask import Flask, render_template, request, jsonify, send_from_directory, session, redirect, url_for, flash
 from flask_socketio import SocketIO, emit
 from flask_sqlalchemy import SQLAlchemy
 from difflib import SequenceMatcher
 from werkzeug.utils import secure_filename
+import shutil
 
 # --- CONFIG ---
 def resource_path(relative_path):
@@ -33,12 +32,9 @@ socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 ADMIN_PASSWORD = "admin"
 BASE_DIR = os.getcwd()
-SNIPPETS_DIR = os.path.join(BASE_DIR, 'snippets')
 DEFAULT_SONGS_DIR = os.path.join(BASE_DIR, 'songs')
 IMAGES_DIR = os.path.join(BASE_DIR, 'images')
-FFMPEG_PATH = os.path.join(BASE_DIR, "ffmpeg.exe")
 
-os.makedirs(SNIPPETS_DIR, exist_ok=True)
 os.makedirs(DEFAULT_SONGS_DIR, exist_ok=True)
 os.makedirs(IMAGES_DIR, exist_ok=True)
 
@@ -53,12 +49,12 @@ class Song(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     quiz_id = db.Column(db.Integer, db.ForeignKey('quiz.id'), nullable=False)
     type = db.Column(db.String(20), default="standard") 
-    filename = db.Column(db.String(200), nullable=True)
-    image_file = db.Column(db.String(200), nullable=True)
+    filename = db.Column(db.String(300), nullable=True)
+    image_file = db.Column(db.String(300), nullable=True)
     artist = db.Column(db.String(100), default="?")
     title = db.Column(db.String(100), default="?")
     extra_data = db.Column(db.String(500), default="") 
-    start_time = db.Column(db.Float, default=0.0) # Promijenjeno u Float za WaveSurfer preciznost
+    start_time = db.Column(db.Float, default=0.0)
     duration = db.Column(db.Float, default=15.0)
     round_number = db.Column(db.Integer, default=1)
 
@@ -101,19 +97,7 @@ def calculate_similarity(u, c):
     if u == c: return 1.0
     return 1.0 if SequenceMatcher(None, u, c).ratio() >= 0.85 else 0.0
 
-def create_snippet(filename, start, dur):
-    path = os.path.join(DEFAULT_SONGS_DIR, filename)
-    # Dodan jedinstveni naziv za svaki isječak da se izbjegne cache problem
-    out_fn = f"cut_{start}_{dur}_{filename}"
-    out = os.path.join(SNIPPETS_DIR, out_fn)
-    if os.path.exists(out): return out_fn
-    cmd = [FFMPEG_PATH if os.path.exists(FFMPEG_PATH) else "ffmpeg", "-y", "-i", path, "-ss", str(start), "-t", str(dur), "-vn", "-acodec", "libmp3lame", out]
-    try: 
-        subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return out_fn
-    except: return None
-
-# --- ROUTES (Skraćeno radi preglednosti, ali sve je tu) ---
+# --- ROUTES ---
 @app.route("/login", methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -125,8 +109,10 @@ def login():
 
 @app.route("/")
 def index(): return render_template("index.html")
+
 @app.route("/player")
 def player(): return render_template("player.html")
+
 @app.route('/screen')
 def screen(): 
     q = get_active_quiz()
@@ -149,8 +135,7 @@ def admin_setup():
 
 @app.route('/images/<filename>')
 def serve_image(filename): return send_from_directory(IMAGES_DIR, filename)
-@app.route('/snippets/<filename>')
-def serve_snippet(filename): return send_from_directory(SNIPPETS_DIR, filename)
+
 @app.route('/stream_song/<path:filename>')
 def stream_song(filename): return send_from_directory(DEFAULT_SONGS_DIR, filename)
 
@@ -161,6 +146,61 @@ def create_quiz():
     Quiz.query.update({Quiz.is_active: False})
     db.session.add(Quiz(title=request.json.get("title"), is_active=True))
     db.session.commit()
+    return jsonify({"status": "ok"})
+
+@app.route("/admin/scan_local_folder", methods=["POST"])
+@login_required
+def scan_local_folder():
+    """Skenira mapu na disku koju je admin upisao i vraća popis MP3-a."""
+    folder_path = request.json.get("path")
+    if not folder_path or not os.path.isdir(folder_path):
+        return jsonify({"status": "error", "msg": "Mapa ne postoji ili putanja nije valjana."})
+    mp3_files = []
+    try:
+        for f in os.listdir(folder_path):
+            if f.lower().endswith('.mp3'):
+                mp3_files.append(f)
+        return jsonify({"status": "ok", "files": mp3_files})
+    except Exception as e:
+        return jsonify({"status": "error", "msg": str(e)})
+
+@app.route("/admin/import_external_song", methods=["POST"])
+@login_required
+def import_external_song():
+    """Kopira pjesmu iz vanjske mape u 'songs' folder i dodaje je u kviz."""
+    data = request.json
+    source_path = data.get("source_path") # npr. D:/Music/song.mp3
+    filename = data.get("filename")
+    
+    if not os.path.exists(source_path):
+        return jsonify({"status": "error", "msg": "Izvorna datoteka ne postoji."})
+
+    # Odredi ciljnu putanju u mapi 'songs'
+    destination = os.path.join(DEFAULT_SONGS_DIR, filename)
+    
+    # Kopiraj datoteku
+    try:
+        shutil.copy2(source_path, destination)
+    except Exception as e:
+        return jsonify({"status": "error", "msg": f"Greška pri kopiranju: {str(e)}"})
+
+    # Dodaj u bazu
+    q = get_active_quiz()
+    if not q:
+        return jsonify({"status": "error", "msg": "Nema aktivnog kviza."})
+
+    s = Song(
+        quiz_id=q.id,
+        filename=filename,
+        artist="?",     # Admin će kasnije urediti
+        title=filename.replace(".mp3", ""), # Defaultni naslov je ime fajla
+        start_time=0.0,
+        duration=15.0,
+        round_number=int(data.get("round", 1))
+    )
+    db.session.add(s)
+    db.session.commit()
+
     return jsonify({"status": "ok"})
 
 @app.route("/admin/add_song_advanced", methods=["POST"])
@@ -182,6 +222,20 @@ def remove_song():
     db.session.commit()
     return jsonify({"status": "ok"})
 
+@app.route("/admin/update_song", methods=["POST"])
+@login_required
+def update_song():
+    data = request.json
+    song = Song.query.get(data.get("id"))
+    if song:
+        song.artist = data.get("artist")
+        song.title = data.get("title")
+        song.start_time = float(data.get("start"))
+        song.duration = float(data.get("duration"))
+        db.session.commit()
+        return jsonify({"status": "ok"})
+    return jsonify({"status": "error", "msg": "Song not found"}), 404
+
 # --- SOCKETS ---
 @socketio.on("player_join")
 def handle_join(d):
@@ -201,18 +255,19 @@ def handle_play(d):
     s = Song.query.get(d["id"])
     if not s: return
     payload = {"round": s.round_number, "action": "playing", "type": s.type, "id": s.id}
-    if s.filename:
-        f = create_snippet(s.filename, s.start_time, s.duration)
-        if f: emit("play_audio", {"file": f}, broadcast=True)
-    if s.type == 'visual': payload["image"] = s.image_file
-    if s.type == 'lyrics': payload["text"] = s.extra_data
-    
-    # Slanje indexa pjesme za screen
     songs_in_r = Song.query.filter_by(quiz_id=s.quiz_id, round_number=s.round_number).order_by(Song.id).all()
     idx = next((i for i, song in enumerate(songs_in_r) if song.id == s.id), -1) + 1
     payload["song_index"] = idx
-    
+    if s.type == 'visual': payload["image"] = s.image_file
+    if s.type == 'lyrics': payload["text"] = s.extra_data
     emit("screen_update_status", payload, broadcast=True)
+    if s.filename:
+        audio_data = {
+            "url": url_for('stream_song', filename=s.filename),
+            "start": s.start_time,
+            "duration": s.duration
+        }
+        emit("play_audio", audio_data, broadcast=True)
 
 @socketio.on("admin_confirm_player_score")
 def confirm_player_score(data):
@@ -220,9 +275,8 @@ def confirm_player_score(data):
     all_scores = {pl.name: pl.score for pl in Player.query.all()}
     emit("update_leaderboard", all_scores, broadcast=True)
 
-# POPRAVLJENO: __name__ == "__main__" (bila je jedna donja crta i krivi naziv)
+
 if __name__ == "__main__":
     ip = socket.gethostbyname(socket.gethostname())
     print(f"ROCK QUIZ READY ON {ip}:5000")
-    # POPRAVLJENO: log_output=True pomaže kod debugiranja snipeta
     socketio.run(app, host="0.0.0.0", port=5000, debug=True)
