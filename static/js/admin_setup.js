@@ -27,6 +27,16 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         });
     }
+    // Učitaj zadnju korištenu putanju iz localStorage
+    const savedPath = localStorage.getItem('rockQuiz_lastPath');
+    if (savedPath) {
+        const input = document.getElementById('localFolderPath');
+        if (input) {
+            input.value = savedPath;
+            // Pozovi skeniranje odmah, ali bez blokiranja UI-a (opcionalno)
+            SETUP.scanFolder(); 
+        }
+    }
 });
 
 // --- WAVESURFER INIT ---
@@ -234,6 +244,8 @@ SETUP.scanFolder = async function() {
         return;
     }
 
+    localStorage.setItem('rockQuiz_lastPath', path);
+
     listContainer.innerHTML = '<div class="text-white text-center p-2"><div class="spinner-border spinner-border-sm"></div> Tražim...</div>';
 
     try {
@@ -278,11 +290,14 @@ SETUP.scanFolder = async function() {
 
 SETUP.importSong = async function(fullPath, filename) {
     const r = document.getElementById('targetRound') ? document.getElementById('targetRound').value : 1;
+    
+    // Vizualni feedback na gumbu
     const btn = event.currentTarget;
     const originalContent = btn.innerHTML;
+    if(btn.disabled) return; // Spriječi dvostruki klik
     
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
     btn.disabled = true;
-    btn.innerHTML = '<div class="spinner-border spinner-border-sm"></div>';
 
     try {
         const res = await fetch("/admin/import_external_song", {
@@ -296,16 +311,135 @@ SETUP.importSong = async function(fullPath, filename) {
         const data = await res.json();
         
         if(data.status === 'ok') {
-            // Refresh stranice da se vidi nova pjesma u kvizu
-            location.reload();
+            // 1. Promijeni gumb u zelenu kvačicu (uspjeh)
+            btn.classList.remove('btn-success');
+            btn.classList.add('btn-outline-success');
+            btn.innerHTML = '<i class="bi bi-check-lg"></i>';
+            
+            // 2. Dodaj pjesmu u tablicu desno BEZ RELOADA
+            addSongToTableHTML(data.song);
+            
+            // 3. Ako je tablica bila prazna, makni poruku "Prazan kviz"
+            const emptyMsg = document.querySelector('.table-container .text-center');
+            if(emptyMsg) emptyMsg.style.display = 'none';
+
         } else {
+            // Greška
             alert("Greška: " + data.msg);
             btn.innerHTML = originalContent;
             btn.disabled = false;
         }
     } catch(e) {
+        console.error(e);
         alert("Greška pri komunikaciji sa serverom.");
         btn.innerHTML = originalContent;
         btn.disabled = false;
     }
+};
+
+// Pomoćna funkcija za generiranje HTML-a reda tablice
+function addSongToTableHTML(s) {
+    const tbody = document.getElementById('quizSongsList');
+    
+    // Ako tbody ne postoji (prva pjesma), moramo ponovno kreirati tablicu ili samo dodati u postojeću logiku
+    // Pretpostavljamo da tablica postoji u HTML-u. Ako je hidden, treba paziti.
+    
+    if (!tbody) {
+        // Ako je prikazana poruka "Prazan kviz", reload je ipak sigurniji za prvi put
+        // ili moramo maknuti div s porukom i ubaciti table strukturu. 
+        // Radi jednostavnosti, ako nema tbody-a, reloadat ćemo samo prvi put.
+        location.reload(); 
+        return;
+    }
+
+    const tr = document.createElement('tr');
+    tr.className = 'q-row';
+    tr.id = 'qrow-' + s.id;
+    tr.setAttribute('data-round', s.round);
+    tr.setAttribute('data-id', s.id);
+    
+    // Provjeri filter (ako gledamo Rundu 2, a dodali smo u Rundu 1, sakrij red)
+    const activeFilterBtn = document.querySelector('.btn-group .active');
+    let currentFilter = 0;
+    if(activeFilterBtn) {
+        if(activeFilterBtn.innerText.includes('R1')) currentFilter = 1;
+        if(activeFilterBtn.innerText.includes('R2')) currentFilter = 2;
+        if(activeFilterBtn.innerText.includes('R3')) currentFilter = 3;
+    }
+    
+    if (currentFilter !== 0 && currentFilter != s.round) {
+        tr.style.display = 'none';
+    }
+
+    tr.innerHTML = `
+        <td class="ps-3" style="width:40px;">
+            <span class="badge bg-warning text-dark">R${s.round}</span>
+        </td>
+        <td>
+            <div class="fw-bold text-white text-truncate" style="max-width: 250px;">${s.artist}</div>
+            <div class="small text-muted text-truncate" style="max-width: 250px;">${s.title}</div>
+        </td>
+        <td class="text-end pe-3" style="width:100px;">
+            <div class="btn-group">
+                <button class="btn btn-sm btn-outline-info" 
+                        title="Uredi isječak"
+                        onclick="SETUP.openEditor('${s.id}', '${s.filename}', '${escapeHtml(s.artist)}', '${escapeHtml(s.title)}', '${s.start}', '${s.duration}')">
+                    <i class="bi bi-pencil-fill"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger" 
+                        title="Obriši iz kviza"
+                        onclick="SETUP.removeSong('${s.id}')">
+                    <i class="bi bi-trash-fill"></i>
+                </button>
+            </div>
+        </td>
+    `;
+    
+    // Dodaj na kraj tablice
+    tbody.appendChild(tr);
+    
+    // Scrollaj do dna tablice
+    const container = document.querySelector('.table-container');
+    container.scrollTop = container.scrollHeight;
+}
+
+// Helper za escape znakova (da navodnici ne slome HTML)
+function escapeHtml(text) {
+    if (!text) return "";
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+SETUP.openPicker = async function() {
+    const btn = event.currentTarget;
+    const oldIcon = btn.innerHTML;
+    
+    // Vizualni feedback da se nešto događa
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    btn.disabled = true;
+
+    try {
+        // Pozovi Python da otvori prozor
+        const res = await fetch("/admin/open_folder_picker");
+        const data = await res.json();
+        
+        if(data.status === 'ok' && data.path) {
+            // Upiši putanju u input polje
+            document.getElementById('localFolderPath').value = data.path;
+            // Spremi putanju u local storage
+            localStorage.setItem('rockQuiz_lastPath', data.path);
+            // Automatski pokreni skeniranje
+            SETUP.scanFolder();
+        }
+    } catch(e) {
+        console.error("Greška pri otvaranju pickera:", e);
+    }
+
+    // Vrati gumb u normalu
+    btn.innerHTML = oldIcon;
+    btn.disabled = false;
 };
