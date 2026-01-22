@@ -7,6 +7,7 @@ let playQueue = [];
 let currentQueueIndex = 0;
 let autoplayTimeout = null;   // Timer za sljedeću pjesmu u redu
 let audioStopTimer = null;    // Timer za zaustavljanje trenutne pjesme (NOVO)
+window.LIVE = window.LIVE || {};
 
 // --- SOCKET LISTENERS ---
 socket.on('play_audio', (data) => {

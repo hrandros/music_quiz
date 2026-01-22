@@ -11,6 +11,11 @@ from werkzeug.utils import secure_filename
 import shutil
 import tkinter as tk
 from tkinter import filedialog
+from mutagen.mp3 import MP3
+from mutagen.id3 import ID3
+import requests
+import re
+
 
 # --- CONFIG ---
 def resource_path(relative_path):
@@ -166,6 +171,37 @@ def create_quiz():
     db.session.commit()
     return jsonify({"status": "ok"})
 
+@app.route("/admin/api_check_deezer", methods=["POST"])
+@login_required
+def api_check_deezer():
+    filename = request.json.get("filename", "")
+    
+    # Čišćenje naziva: makni .mp3, zamijeni crtice i donje crte razmacima
+    query = re.sub(r'\.mp3$', '', filename, flags=re.IGNORECASE)
+    query = re.sub(r'^\d+[\s.\-_)]+', '', query)
+    query = query.replace('_', ' ').replace('-', ' ')
+    
+    try:
+        # Deezer Search API
+        url = f"https://api.deezer.com/search?q={query}"
+        response = requests.get(url, timeout=5)
+        data = response.json()
+        
+        if data.get('data') and len(data['data']) > 0:
+            result = data['data'][0] # Uzimamo prvi (najtočniji) rezultat
+            return jsonify({
+                "status": "ok",
+                "found": True,
+                "artist": result['artist']['name'],
+                "title": result['title'],
+                "album": result['album']['title'],
+                "preview": result['preview'] # Link na 30s isječka ako zatreba
+            })
+    except Exception as e:
+        print(f"Deezer API Error: {e}")
+        
+    return jsonify({"status": "ok", "found": False})
+
 @app.route("/admin/open_folder_picker", methods=["GET"])
 @login_required
 def open_folder_picker():
@@ -197,22 +233,29 @@ def scan_local_folder():
     if not raw_path:
         return jsonify({"status": "error", "msg": "Putanja nije definirana."})
     
-    # Popravak putanje za Windows (miče navodnike ako ih je netko kopirao)
-    folder_path = raw_path.strip('"').strip("'")
+    # OVO JE BITNO: Čišćenje putanje
+    folder_path = raw_path.strip('"').strip("'").strip()
     
     if not os.path.isdir(folder_path):
-        return jsonify({"status": "error", "msg": "Mapa ne postoji."})
+        # Ako dobiješ ovu grešku, znači da Python ne vidi tu mapu na disku
+        return jsonify({"status": "error", "msg": f"Mapa ne postoji na putanji: {folder_path}"})
     
     mp3_files = []
     try:
-        # Listaj datoteke
-        for f in os.listdir(folder_path):
-            # Provjera ekstenzije (case-insensitive, hvata mp3 i MP3)
-            if f.lower().endswith('.mp3'):
-                mp3_files.append(f)
+        # Rekurzivno skeniranje
+        for root, dirs, files in os.walk(folder_path):
+            for f in files:
+                if f.lower().endswith('.mp3'):
+                    full_path = os.path.join(root, f)
+                    # Relativna putanja
+                    rel_path = os.path.relpath(full_path, folder_path)
+                    mp3_files.append(rel_path.replace("\\", "/"))
         
+        mp3_files.sort()
         return jsonify({"status": "ok", "files": mp3_files})
     except Exception as e:
+        # Ako se ovdje dogodi greška, JS će ispisati "Greška pri skeniranju"
+        print(f"DEBUG: {str(e)}")
         return jsonify({"status": "error", "msg": str(e)})
 
 @app.route("/admin/import_external_song", methods=["POST"])
@@ -220,30 +263,34 @@ def scan_local_folder():
 def import_external_song():
     try:
         data = request.json
-        source_path = data.get("source_path")
-        filename = data.get("filename")
+        source_path = data.get("source_path") # Puna putanja na disku
+        rel_path = data.get("filename")      # Relativna putanja (npr. "Pop/Abba.mp3")
         
-        # Provjera aktivnog kviza
+        # 1. Izdvoji samo naziv datoteke bez foldera za bazu i destinaciju
+        # os.path.basename ("Pop/Abba.mp3") -> "Abba.mp3"
+        pure_filename = os.path.basename(rel_path)
+        
+        # 2. Pripremi naslov za bazu (ako admin nije poslao s Deezera)
+        # os.path.splitext("Abba.mp3")[0] -> "Abba"
+        clean_name = os.path.splitext(pure_filename)[0].replace("_", " ").replace("-", " ")
+        
+        artist_name = data.get("artist") if data.get("artist") else "Nepoznato"
+        title_name = data.get("title") if data.get("title") else clean_name
+
         q = get_active_quiz()
-        if not q:
-            return jsonify({"status": "error", "msg": "Nema aktivnog kviza! Kreiraj ili odaberi kviz."})
-
-        if not os.path.exists(source_path):
-            return jsonify({"status": "error", "msg": "Izvorna datoteka ne postoji."})
-
-        # Sigurnosna kopija imena da izbjegnemo duplikate
-        safe_filename = secure_filename(filename)
+        
+        # 3. Kopiranje datoteke u lokalni folder aplikacije
+        safe_filename = secure_filename(pure_filename)
         destination = os.path.join(DEFAULT_SONGS_DIR, safe_filename)
         
-        # Kopiraj datoteku
+        # Koristimo source_path koji je JS ispravno spojio (Base + Relativna)
         shutil.copy2(source_path, destination)
 
-        # Dodaj u bazu
         s = Song(
             quiz_id=q.id,
             filename=safe_filename,
-            artist="Nepoznato",     # Default, promijeniš u editoru
-            title=safe_filename.replace(".mp3", ""),
+            artist=artist_name,
+            title=title_name,
             start_time=0.0,
             duration=15.0,
             round_number=int(data.get("round", 1))
@@ -251,21 +298,16 @@ def import_external_song():
         db.session.add(s)
         db.session.commit()
 
-        # VRATI PODATKE O PJESMI (Bitno za frontend!)
-        song_data = {
-            "id": s.id,
-            "artist": s.artist,
-            "title": s.title,
-            "filename": s.filename,
-            "start": s.start_time,
-            "duration": s.duration,
-            "round": s.round_number
-        }
-
-        return jsonify({"status": "ok", "song": song_data})
-        
+        return jsonify({
+            "status": "ok", 
+            "song": {
+                "id": s.id, "artist": s.artist, "title": s.title, 
+                "filename": s.filename, "start": s.start_time, 
+                "duration": s.duration, "round": s.round_number
+            }
+        })
     except Exception as e:
-        print("ERROR IMPORTING:", e) # Ispis greške u konzolu
+        print(f"Import error: {str(e)}")
         return jsonify({"status": "error", "msg": str(e)})
 
 @app.route("/admin/add_song_advanced", methods=["POST"])
@@ -426,7 +468,7 @@ def handle_player_answer(data):
             round_number=1 # Ovdje bi trebalo dohvatiti stvarnu rundu iz pjesme
         )
         # Dohvati rundu iz pjesme da budemo precizni
-        song = Song.query.get(data['song_id'])
+        song = Song.query.get(data['id'])
         if song: ans.round_number = song.round_number
         db.session.add(ans)
     

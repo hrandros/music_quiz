@@ -39,6 +39,63 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 });
 
+// Helper za escape znakova (da navodnici ne slome HTML)
+function escapeHtml(text) {
+    if (!text) return "";
+    return text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+// Pomoćna funkcija za generiranje HTML-a reda tablice
+function addSongToTableHTML(s) {
+    const tbody = document.getElementById('quizSongsList');
+    if (!tbody) {
+        location.reload(); // Ako ne nađe tablicu, reload je najsigurniji
+        return;
+    }
+
+    const tr = document.createElement('tr');
+    tr.className = 'q-row';
+    tr.id = 'qrow-' + s.id;
+    tr.setAttribute('data-round', s.round);
+    tr.setAttribute('data-id', s.id);
+
+    // Provjera trenutnog filtera runde da ne dodamo vidljivu pjesmu u krivu rundu
+    const activeFilterBtn = document.querySelector('.round-filter.active');
+    if (activeFilterBtn) {
+        const currentFilter = parseInt(activeFilterBtn.dataset.round);
+        if (currentFilter !== 0 && currentFilter != s.round) {
+            tr.style.display = 'none';
+        }
+    }
+
+    tr.innerHTML = `
+        <td class="ps-3" style="width:40px;">
+            <span class="badge bg-warning text-dark">R${s.round}</span>
+        </td>
+        <td>
+            <div class="fw-bold text-white text-truncate" style="max-width: 250px;">${s.artist}</div>
+            <div class="small text-muted text-truncate" style="max-width: 250px;">${s.title}</div>
+        </td>
+        <td class="text-end pe-3" style="width:100px;">
+            <div class="btn-group">
+                <button class="btn btn-sm btn-outline-info" onclick="SETUP.openEditor('${s.id}', '${s.filename}', '${s.artist}', '${s.title}', '${s.start}', '${s.duration}')">
+                    <i class="bi bi-pencil-fill"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="SETUP.removeSong('${s.id}')">
+                    <i class="bi bi-trash-fill"></i>
+                </button>
+            </div>
+        </td>
+    `;
+    tbody.appendChild(tr);
+}
+
+
 // --- WAVESURFER INIT ---
 SETUP.initWaveSurfer = function() {
     if(typeof WaveSurfer === 'undefined') return;
@@ -272,12 +329,26 @@ SETUP.scanFolder = async function() {
             // Koristimo path iz inputa kao base
             const fullPath = path.endsWith('\\') || path.endsWith('/') ? path + f : path + '/' + f;
             
+            // --- NOVO: Izdvajanje samo imena datoteke za ljepši prikaz ---
+            // Dijelimo po '/' (jer nam backend šalje relativne putanje s forward slashom)
+            const fileNameWithExt = f.split('/').pop();
+            
             html += `
-            <div class="d-flex justify-content-between align-items-center bg-black p-2 mb-1 border-bottom border-secondary text-white small">
-                <span class="text-truncate me-2" title="${f}">${f}</span>
-                <button class="btn btn-xs btn-success" onclick="SETUP.importSong('${fullPath.replace(/\\/g, '\\\\')}', '${f}')">
-                    <i class="bi bi-plus-lg"></i>
-                </button>
+            <div class="d-flex justify-content-between align-items-center bg-black p-2 mb-1 border-bottom border-secondary text-white">
+                <div class="me-2 overflow-hidden" style="min-width: 0;">
+                    <div class="fw-bold text-truncate" style="font-size: 0.95rem;">${fileNameWithExt.replace(/\.mp3$/i, '')}</div>
+                    <div class="text-muted text-truncate" style="font-size: 0.7rem;"><i class="bi bi-folder2 me-1"></i>${f}</div>
+                </div>
+                <div class="flex-shrink-0">
+                    <button class="btn btn-sm btn-outline-info me-1" 
+                        onclick="SETUP.magicCheck('${fullPath.replace(/\\/g, '\\\\')}', '${fileNameWithExt.replace(/'/g, "\\'")}')">
+                        <i class="bi bi-magic"></i>
+                    </button>
+                    <button class="btn btn-sm btn-success" 
+                        onclick="SETUP.importSong('${fullPath.replace(/\\/g, '\\\\')}', '${f.replace(/'/g, "\\'")}')">
+                        <i class="bi bi-plus-lg"></i>
+                    </button>
+                </div>
             </div>`;
         });
         listContainer.innerHTML = html;
@@ -288,131 +359,64 @@ SETUP.scanFolder = async function() {
     }
 };
 
-SETUP.importSong = async function(fullPath, filename) {
+// Ažurirana funkcija koja prima i metapodatke
+SETUP.importSong = async function(fullPath, filename, artist = "", title = "") {
     const r = document.getElementById('targetRound') ? document.getElementById('targetRound').value : 1;
     
     // Vizualni feedback na gumbu
-    const btn = event.currentTarget;
-    const originalContent = btn.innerHTML;
-    if(btn.disabled) return; // Spriječi dvostruki klik
+    // Koristimo event.currentTarget ako je kliknuto, ili tražimo gumb po putanji
+    const btn = event ? event.currentTarget : null;
+    const originalContent = btn ? btn.innerHTML : "";
     
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-    btn.disabled = true;
+    if(btn && btn.disabled) return; 
+    
+    if(btn) {
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        btn.disabled = true;
+    }
 
     try {
         const res = await fetch("/admin/import_external_song", {
-            method: "POST", headers: {"Content-Type": "application/json"},
+            method: "POST", 
+            headers: {"Content-Type": "application/json"},
             body: JSON.stringify({ 
                 source_path: fullPath,
                 filename: filename,
-                round: r
+                round: r,
+                artist: artist, // Šaljemo izvođača ako postoji
+                title: title    // Šaljemo naslov ako postoji
             })
         });
         const data = await res.json();
         
         if(data.status === 'ok') {
-            // 1. Promijeni gumb u zelenu kvačicu (uspjeh)
-            btn.classList.remove('btn-success');
-            btn.classList.add('btn-outline-success');
-            btn.innerHTML = '<i class="bi bi-check-lg"></i>';
+            if(btn) {
+                btn.classList.remove('btn-success');
+                btn.classList.add('btn-outline-success');
+                btn.innerHTML = '<i class="bi bi-check-lg"></i>';
+            }
             
-            // 2. Dodaj pjesmu u tablicu desno BEZ RELOADA
+            // Dodaj pjesmu u tablicu desno
             addSongToTableHTML(data.song);
             
-            // 3. Ako je tablica bila prazna, makni poruku "Prazan kviz"
             const emptyMsg = document.querySelector('.table-container .text-center');
             if(emptyMsg) emptyMsg.style.display = 'none';
 
         } else {
-            // Greška
             alert("Greška: " + data.msg);
-            btn.innerHTML = originalContent;
-            btn.disabled = false;
+            if(btn) {
+                btn.innerHTML = originalContent;
+                btn.disabled = false;
+            }
         }
     } catch(e) {
         console.error(e);
-        alert("Greška pri komunikaciji sa serverom.");
-        btn.innerHTML = originalContent;
-        btn.disabled = false;
+        if(btn) {
+            btn.innerHTML = originalContent;
+            btn.disabled = false;
+        }
     }
 };
-
-// Pomoćna funkcija za generiranje HTML-a reda tablice
-function addSongToTableHTML(s) {
-    const tbody = document.getElementById('quizSongsList');
-    
-    // Ako tbody ne postoji (prva pjesma), moramo ponovno kreirati tablicu ili samo dodati u postojeću logiku
-    // Pretpostavljamo da tablica postoji u HTML-u. Ako je hidden, treba paziti.
-    
-    if (!tbody) {
-        // Ako je prikazana poruka "Prazan kviz", reload je ipak sigurniji za prvi put
-        // ili moramo maknuti div s porukom i ubaciti table strukturu. 
-        // Radi jednostavnosti, ako nema tbody-a, reloadat ćemo samo prvi put.
-        location.reload(); 
-        return;
-    }
-
-    const tr = document.createElement('tr');
-    tr.className = 'q-row';
-    tr.id = 'qrow-' + s.id;
-    tr.setAttribute('data-round', s.round);
-    tr.setAttribute('data-id', s.id);
-    
-    // Provjeri filter (ako gledamo Rundu 2, a dodali smo u Rundu 1, sakrij red)
-    const activeFilterBtn = document.querySelector('.btn-group .active');
-    let currentFilter = 0;
-    if(activeFilterBtn) {
-        if(activeFilterBtn.innerText.includes('R1')) currentFilter = 1;
-        if(activeFilterBtn.innerText.includes('R2')) currentFilter = 2;
-        if(activeFilterBtn.innerText.includes('R3')) currentFilter = 3;
-    }
-    
-    if (currentFilter !== 0 && currentFilter != s.round) {
-        tr.style.display = 'none';
-    }
-
-    tr.innerHTML = `
-        <td class="ps-3" style="width:40px;">
-            <span class="badge bg-warning text-dark">R${s.round}</span>
-        </td>
-        <td>
-            <div class="fw-bold text-white text-truncate" style="max-width: 250px;">${s.artist}</div>
-            <div class="small text-muted text-truncate" style="max-width: 250px;">${s.title}</div>
-        </td>
-        <td class="text-end pe-3" style="width:100px;">
-            <div class="btn-group">
-                <button class="btn btn-sm btn-outline-info" 
-                        title="Uredi isječak"
-                        onclick="SETUP.openEditor('${s.id}', '${s.filename}', '${escapeHtml(s.artist)}', '${escapeHtml(s.title)}', '${s.start}', '${s.duration}')">
-                    <i class="bi bi-pencil-fill"></i>
-                </button>
-                <button class="btn btn-sm btn-outline-danger" 
-                        title="Obriši iz kviza"
-                        onclick="SETUP.removeSong('${s.id}')">
-                    <i class="bi bi-trash-fill"></i>
-                </button>
-            </div>
-        </td>
-    `;
-    
-    // Dodaj na kraj tablice
-    tbody.appendChild(tr);
-    
-    // Scrollaj do dna tablice
-    const container = document.querySelector('.table-container');
-    container.scrollTop = container.scrollHeight;
-}
-
-// Helper za escape znakova (da navodnici ne slome HTML)
-function escapeHtml(text) {
-    if (!text) return "";
-    return text
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
 
 SETUP.openPicker = async function() {
     const btn = event.currentTarget;
@@ -442,4 +446,34 @@ SETUP.openPicker = async function() {
     // Vrati gumb u normalu
     btn.innerHTML = oldIcon;
     btn.disabled = false;
+};
+
+SETUP.magicCheck = async function(fullPath, filename) {
+    const btn = event.currentTarget;
+    const oldHtml = btn.innerHTML;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    btn.disabled = true;
+
+    try {
+        const res = await fetch("/admin/api_check_deezer", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({ filename: filename }) 
+        });
+        const data = await res.json();
+
+        if (data.status === "ok" && data.found) {
+            if (confirm(`Pronađeno:\n\nIzvođač: ${data.artist}\nNaslov: ${data.title}\n\nUvesti s ovim podacima?`)) {
+                await SETUP.importSong(fullPath, filename, data.artist, data.title);
+            }
+        } else {
+            alert("Deezer nije pronašao podatke za: " + filename);
+        }
+    } catch (e) {
+        console.error(e);
+        alert("Greška u komunikaciji s Deezerom.");
+    } finally {
+        btn.innerHTML = oldHtml;
+        btn.disabled = false;
+    }
 };
