@@ -56,8 +56,28 @@ def login():
 @login_required
 def admin_live():
     q = get_active_quiz()
+    # Pošalji i sve kvizove kako bi admin mogao prebacivati aktivni kviz
+    all_q = Quiz.query.order_by(Quiz.id.desc()).all()
     songs = Song.query.filter_by(quiz_id=q.id).order_by(Song.id).all() if q else []
-    return render_template("admin_live.html", songs=songs, quiz=q)
+    return render_template("admin_live.html", songs=songs, quiz=q, all_quizzes=all_q)
+
+
+@admin_bp.route('/switch_quiz', methods=['POST'])
+@login_required
+def switch_quiz():
+    try:
+        qid = int(request.json.get('id', 0))
+    except Exception:
+        return jsonify({'status': 'error', 'msg': 'Invalid id'}), 400
+
+    # Deaktiviraj sve i aktiviraj odabrani
+    Quiz.query.update({Quiz.is_active: False})
+    quiz = Quiz.query.get(qid)
+    if not quiz:
+        return jsonify({'status': 'error', 'msg': 'Quiz not found'}), 404
+    quiz.is_active = True
+    db.session.commit()
+    return jsonify({'status': 'ok'})
 
 
 @admin_bp.route("/setup")

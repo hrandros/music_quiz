@@ -1,7 +1,5 @@
 /* static/css/main.css - ROCK EDITION */
 
-@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;700&family=Roboto+Condensed:wght@400;700&display=swap');
-
 :root {
     /* ROCK PALETA */
     --mq-bg-body: #0a0a0a;       /* Skoro crna */
@@ -130,3 +128,93 @@ h1, h2, h3, h4, h5, .navbar-brand, .btn, th {
     padding: 15px;
     background: #000;
 }
+
+
+
+
+/* === UTILITIES DODACI (sigurno, bez utjecaja na postojeće) === */
+
+/* 1) Fade-in koji koristiš u <main> i player formama */
+.fade-in {
+  transform: none !important;
+}
+
+.modal-open .fade-in {
+  transform: none !important;
+}
+
+/* 2) Lock overlay za player (JS ga prikazuje/sakriva) */
+#lock-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.7);
+  backdrop-filter: blur(2px);
+  z-index: 1050; /* iznad sadržaja, ispod eventualnog modala */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--mq-text-main);
+}
+#lock-overlay .lock-badge {
+  border: 2px solid var(--mq-primary);
+  padding: 12px 18px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  background: rgba(0,0,0,.4);
+}
+
+/* 3) Badge i heading utility (koristiš u player unlocku) */
+.badge-round {
+  border-radius: 999px;
+  padding: 6px 12px;
+}
+
+/* 4) Focus vidljivost (a11y bez ružnog “box shadowa”) */
+:focus-visible {
+  outline: 2px solid var(--mq-accent);
+  outline-offset: 2px;
+}
+
+/* 5) Sitno zatezanje navbar branda da ne “poskakuje” na hover */
+.navbar-brand {
+  transition: transform .12s ease-out, color .12s ease-out;
+}
+.navbar-brand:hover { transform: translateY(-1px); }
+
+/* 6) Card hover efekt na izborima početne (nije agresivan) */
+.card:hover {
+  transform: translateY(-2px);
+  transition: transform .15s ease-out;
+}
+
+/* 7) Player veliki inputi — koristiš form-control-lg + dodatni polish */
+.form-control-lg {
+  padding-top: .9rem;
+  padding-bottom: .9rem;
+}
+
+/* 8) “Spremljeno” labelica – već imaš opacity toggling; dodaj transition */
+#save-status {
+  transition: opacity 160ms ease-out;
+}
+
+/* 9) Leaderboard (ako prikazuješ moj rezultat u headeru) */
+#my-score {
+  font-weight: 700;
+  color: var(--mq-accent);
+}
+
+/* 10) Prefer-reduced-motion za korisnike koji žele manje animacija */
+@media (prefers-reduced-motion: reduce) {
+  .fade-in,
+  .animate__animated { 
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* 11) Bootstrap modal z-index prilagodbe */
+#editorPanel { z-index: 1; }
+/* Ensure modals appear above custom overlays */
+.modal-backdrop { z-index: 19990 !important; }
+.modal { z-index: 20000 !important; }

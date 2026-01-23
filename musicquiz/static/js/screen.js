@@ -158,3 +158,49 @@ socket.on('update_leaderboard', (s) => {
         </div>`;
     });
 });
+
+// --- PLAYER LISTENERS ---
+socket.on('admin_player_list_full', (players) => {
+    renderPlayers(players);
+});
+
+socket.on('admin_update_player_list', (players) => {
+    renderPlayers(players);
+});
+
+function renderPlayers(players) {
+    const container = document.getElementById('playersList');
+    if(!container) return;
+    container.innerHTML = '';
+
+    if(!players || players.length === 0) {
+        container.innerHTML = '<div class="text-muted small">Nema prijavljenih igrača.</div>';
+        return;
+    }
+
+    // Prikaži svaki igrača kao veći badge s indikatorom statusa
+    players.forEach(p => {
+        const el = document.createElement('div');
+        el.className = 'player';
+
+        const dot = document.createElement('span');
+        dot.className = 'dot';
+        dot.title = p.status;
+        updatePlayerDot(dot, p.status);
+
+        const badge = document.createElement('span');
+        badge.className = 'name-badge';
+        badge.textContent = p.name;
+
+        el.appendChild(dot);
+        el.appendChild(badge);
+        container.appendChild(el);
+    });
+}
+
+function updatePlayerDot(el, status) {
+    // keep a simple color mapping; visual effect handled by CSS
+    if(status === 'active') el.style.backgroundColor = '#198754'; // success
+    else if(status === 'away') el.style.backgroundColor = '#dc3545'; // danger
+    else el.style.backgroundColor = '#6c757d'; // secondary
+}

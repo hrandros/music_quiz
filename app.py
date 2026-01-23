@@ -23,12 +23,6 @@ def create_app():
 
 if __name__ == "__main__":
     app = create_app()
-    # DEBUG ispisi — privremeno
-    print("TEMPLATE FOLDER:", app.template_folder)
-    print("STATIC FOLDER  :", app.static_folder)
-    print("URL MAP:")
-    for r in app.url_map.iter_rules():
-        print(f"- {r.endpoint:20s} -> {r.rule}")
     import socket
     ip = socket.gethostbyname(socket.gethostname())
     print(f"ROCK QUIZ READY ON http://{ip}:5000")

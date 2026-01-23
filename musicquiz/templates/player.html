@@ -1,40 +1,65 @@
+
 {% extends "base.html" %}
 {% block title %}Player{% endblock %}
+
 {% block nav %}
 <div class="container">
-    <a class="navbar-brand fw-bold text-white" href="{{ url_for('public.index') }}" style="font-family: 'Oswald'; font-size: 1.5rem; letter-spacing: 1px;">
-        <i class="bi bi-lightning-charge-fill text-danger me-1"></i> ROCK<span class="text-danger">QUIZ</span>
-    </a>
+  <a class="navbar-brand fw-bold text-white" href="{{ url_for('public.index') }}"
+     style="font-family: 'Oswald'; font-size: 1.5rem; letter-spacing: 1px;">
+    <i class="bi bi-lightning-charge-fill text-danger me-1" aria-hidden="true"></i>
+    ROCK<span class="text-danger">QUIZ</span>
+  </a>
 </div>
 {% endblock %}
+
 {% block content %}
 <div class="container" style="max-width:500px;">
-    
-    <div id="login-screen">
-        <h1 class="text-center text-white mb-4 display-1"><i class="bi bi-boombox"></i></h1>
-        <input type="text" id="username" class="form-control mb-3 text-center fs-4" placeholder="IME TIMA">
-        <input type="tel" id="userpin" class="form-control mb-4 text-center fs-4" placeholder="PIN" maxlength="4">
-        <button class="btn btn-danger w-100 fs-3 fw-bold" onclick="joinGame()">ULAZ</button>
-        <div id="login-error" class="alert alert-danger mt-3 d-none"></div>
+  <!-- LOGIN -->
+  <div id="login-screen" class="fade-in">
+    <h1 class="text-center text-white mb-4 display-1">
+      <i class="bi bi-boombox" aria-hidden="true"></i>
+    </h1>
+
+    <div class="mb-3">
+      <label for="username" class="form-label text-white">Ime tima</label>
+      <input type="text" id="username" class="form-control text-center fs-4"
+             placeholder="IME TIMA" autocomplete="off" required>
     </div>
 
-    <div id="game-screen" class="d-none">
-        <div class="d-flex justify-content-between text-white border-bottom pb-2 mb-3">
-            <span id="player-name-display" class="fw-bold text-uppercase"></span>
-            <span class="badge bg-warning text-dark fs-5" id="my-score">0</span>
-        </div>
-        
-        <div id="answer-sheet">
-            <div class="text-center text-muted mt-5">Čekam početak runde...</div>
-        </div>
+    <div class="mb-4">
+      <label for="userpin" class="form-label text-white">PIN</label>
+      <input type="tel" id="userpin" class="form-control text-center fs-4"
+             placeholder="PIN" maxlength="4" inputmode="numeric" pattern="\d{4}" autocomplete="one-time-code">
+      <div class="form-text text-muted text-center">Unesi 4-znamenkasti PIN koji je dodijelio admin</div>
     </div>
 
-    <div id="lock-overlay" class="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-90 d-flex flex-column justify-content-center align-items-center d-none" style="z-index:999;">
-        <i class="bi bi-lock-fill display-1 text-danger"></i>
-        <h2 class="text-white">ZAKLJUČANO</h2>
+    <button id="join-btn" class="btn btn-danger w-100 fs-3 fw-bold" onclick="joinGame()">ULAZ</button>
+
+    <div id="login-error" class="alert alert-danger mt-3 d-none" role="alert" aria-live="polite"></div>
+  </div>
+
+  <!-- GAME -->
+  <div id="game-screen" class="d-none fade-in">
+    <div class="d-flex justify-content-between text-white border-bottom pb-2 mb-3">
+      <span id="player-name-display" class="fw-bold text-uppercase"></span>
+      <span class="badge bg-warning text-dark fs-5" id="my-score">0</span>
     </div>
+
+    <div id="answer-sheet">
+      <div class="text-center text-muted mt-5">Čekam početak runde...</div>
+    </div>
+  </div>
+
+  <!-- LOCK OVERLAY -->
+  <div id="lock-overlay" class="d-none">
+    <div class="lock-badge">
+      <i class="bi bi-lock-fill text-danger me-2" aria-hidden="true"></i>
+      <span>ZAKLJUČANO</span>
+    </div>
+  </div>
 </div>
 {% endblock %}
+
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/player.js') }}"></script>
 {% endblock %}

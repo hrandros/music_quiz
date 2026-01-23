@@ -2,6 +2,15 @@ import os
 import shutil
 from werkzeug.utils import secure_filename
 from config import Config
+import hashlib
+
+
+def file_md5(path, block_size=65536):
+    md5 = hashlib.md5()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(block_size), b""):
+            md5.update(chunk)
+    return md5.hexdigest()
 
 def scan_mp3_folder(folder_path: str) -> list:
     """

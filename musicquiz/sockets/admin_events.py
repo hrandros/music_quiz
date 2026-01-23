@@ -1,10 +1,33 @@
 
-from extensions import db
+from extensions import db,socketio
 from flask_socketio import emit
 from musicquiz.models import Player, Song, Answer
 from musicquiz.services.quiz_service import get_active_quiz
 from musicquiz.services.player_status import get_all_players_data
 from musicquiz.services.grading_service import auto_grade_answer
+import time
+
+current_state = {"round": None, "song_id": None, "locked": False}
+
+def start_server_timer(seconds, round_num):
+    def task():
+        remaining = int(seconds)
+        while remaining > 0:
+            socketio.emit("timer_tick", {"sec": remaining}, broadcast=True)
+            time.sleep(1)
+            remaining -= 1
+        # time's up -> lock
+        current_state["locked"] = True
+        socketio.emit("player_lock_input", broadcast=True)
+    socketio.start_background_task(task)
+
+@socketio.on("admin_start_round_timer")
+def handle_start_round_timer(data):
+    seconds = int(data.get("sec", 30))
+    round_num = int(data.get("round", 1))
+    current_state["round"] = round_num
+    current_state["locked"] = False
+    start_server_timer(seconds, round_num)
 
 
 def register_admin_events(socketio):
@@ -208,3 +231,5 @@ def register_admin_events(socketio):
 
         leaderboard = {p.name: p.score for p in Player.query.all()}
         emit("update_leaderboard", leaderboard, broadcast=True)
+
+
