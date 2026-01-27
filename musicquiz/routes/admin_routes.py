@@ -59,7 +59,7 @@ def admin_live():
     # Pošalji i sve kvizove kako bi admin mogao prebacivati aktivni kviz
     all_q = Quiz.query.order_by(Quiz.id.desc()).all()
     songs = Song.query.filter_by(quiz_id=q.id).order_by(Song.id).all() if q else []
-    return render_template("admin_live.html", songs=songs, quiz=q, all_quizzes=all_q)
+    return render_template("admin_live.html", all_songs=songs, quiz=q, all_quizzes=all_q)
 
 
 @admin_bp.route('/switch_quiz', methods=['POST'])

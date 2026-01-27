@@ -16,6 +16,10 @@ def create_app():
     app.config.from_object(Config)
     db.init_app(app)
     socketio.init_app(app, cors_allowed_origins="*", async_mode="threading")
+    with app.app_context():
+        from musicquiz import models 
+        db.create_all()
+        print("Baza podataka i tablice su uspješno kreirani!")
     register_routes(app)
     register_sockets(socketio)
     return app

@@ -1,6 +1,3 @@
-
-/* static/js/admin_setup.js */
-
 const SETUP = {};
 let wavesurfer = null;
 let wsRegions = null;
@@ -23,6 +20,60 @@ function createEl(tag, cls, text) {
   if (cls) el.className = cls;
   if (text != null) el.textContent = text;
   return el;
+}
+
+function addSongToTableHTML(s) {
+  const tbody = document.getElementById('quizSongsList');
+  if (!tbody) { location.reload(); return; }
+
+  const tr = document.createElement('tr');
+  tr.className = 'q-row';
+  tr.id = 'qrow-' + s.id;
+  tr.dataset.round = s.round;
+
+  const tdBadge = document.createElement('td');
+  tdBadge.className = 'ps-3';
+  tdBadge.style.width = '40px';
+  tdBadge.innerHTML = `<span class="badge bg-warning text-dark">R${s.round}</span>`;
+
+  const tdText = document.createElement('td');
+  const artistDiv = createEl('div', 'fw-bold text-white text-truncate', s.artist || '');
+  artistDiv.style.maxWidth = '250px';
+  const titleDiv = createEl('div', 'small text-muted text-truncate', s.title || '');
+  titleDiv.style.maxWidth = '250px';
+  tdText.appendChild(artistDiv);
+  tdText.appendChild(titleDiv);
+
+  const tdAct = document.createElement('td');
+  tdAct.className = 'text-end pe-3';
+  tdAct.style.width = '100px';
+  const group = createEl('div', 'btn-group');
+
+  const btnEdit = createEl('button', 'btn btn-sm btn-outline-info');
+  btnEdit.title = 'Uredi isječak';
+  btnEdit.innerHTML = '<i class="bi bi-pencil-fill"></i>';
+  btnEdit.onclick = () => SETUP.openEditor(
+    s.id,
+    s.filename || 'None',
+    s.artist || '',
+    s.title || '',
+    s.start || 0,
+    s.duration || 15
+  );
+
+  const btnDel = createEl('button', 'btn btn-sm btn-outline-danger');
+  btnDel.title = 'Obriši iz kviza';
+  btnDel.innerHTML = '<i class="bi bi-trash-fill"></i>';
+  btnDel.onclick = () => SETUP.removeSong(s.id);
+
+  group.appendChild(btnEdit);
+  group.appendChild(btnDel);
+  tdAct.appendChild(group);
+
+  tr.appendChild(tdBadge);
+  tr.appendChild(tdText);
+  tr.appendChild(tdAct);
+  tbody.appendChild(tr);
 }
 
 // --- INIT ---
@@ -425,59 +476,3 @@ SETUP.magicCheck = async function (ev, fullPath, filename) {
     }
   }
 };
-
-// --- DODATNO: Dodavanje reda u desnu tablicu bez reload-a
-
-function addSongToTableHTML(s) {
-  const tbody = document.getElementById('quizSongsList');
-  if (!tbody) { location.reload(); return; }
-
-  const tr = document.createElement('tr');
-  tr.className = 'q-row';
-  tr.id = 'qrow-' + s.id;
-  tr.dataset.round = s.round;
-
-  const tdBadge = document.createElement('td');
-  tdBadge.className = 'ps-3';
-  tdBadge.style.width = '40px';
-  tdBadge.innerHTML = `<span class="badge bg-warning text-dark">R${s.round}</span>`;
-
-  const tdText = document.createElement('td');
-  const artistDiv = createEl('div', 'fw-bold text-white text-truncate', s.artist || '');
-  artistDiv.style.maxWidth = '250px';
-  const titleDiv = createEl('div', 'small text-muted text-truncate', s.title || '');
-  titleDiv.style.maxWidth = '250px';
-  tdText.appendChild(artistDiv);
-  tdText.appendChild(titleDiv);
-
-  const tdAct = document.createElement('td');
-  tdAct.className = 'text-end pe-3';
-  tdAct.style.width = '100px';
-  const group = createEl('div', 'btn-group');
-
-  const btnEdit = createEl('button', 'btn btn-sm btn-outline-info');
-  btnEdit.title = 'Uredi isječak';
-  btnEdit.innerHTML = '<i class="bi bi-pencil-fill"></i>';
-  btnEdit.onclick = () => SETUP.openEditor(
-    s.id,
-    s.filename || 'None',
-    s.artist || '',
-    s.title || '',
-    s.start || 0,
-    s.duration || 15
-  );
-
-  const btnDel = createEl('button', 'btn btn-sm btn-outline-danger');
-  btnDel.title = 'Obriši iz kviza';
-  btnDel.innerHTML = '<i class="bi bi-trash-fill"></i>';
-  btnDel.onclick = () => SETUP.removeSong(s.id);
-
-  group.appendChild(btnEdit);
-  group.appendChild(btnDel);
-  tdAct.appendChild(group);
-
-  tr.appendChild(tdBadge);
-  tr.appendChild(tdText);
-  tr.appendChild(tdAct);
-  tbody.appendChild(tr);
-}
