@@ -4,84 +4,17 @@ const socket = io();
 let currentRound = 1;
 let registrationsOpen = false;
 let audioStopTimer = null;
+let isQuizStarted = false;
+let isPaused = false;
 
 window.LIVE = window.LIVE || {};
 
-// --- SOCKET LISTENERS ---
-socket.on('play_audio', (data) => {
-    // 1. Vizualno označavanje u tablici (skrivena tablica ili grading)
-    document.querySelectorAll('.song-row').forEach(row => {
-        row.classList.remove('table-active', 'border-warning', 'border-3');
-    });
-  
-    const row = document.getElementById('row-' + data.id);
-    if (row) {
-        row.classList.add('table-active', 'border-warning', 'border-3');
-        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-
-    // 2. Aktiviraj DJ konzolu (donja traka)
-    const djConsole = document.getElementById('dj-console');
-    if (djConsole) {
-        djConsole.style.display = 'block'; 
-    }
-
-    // 3. Ažuriraj tekstove (Gornja kartica + Mini player)
-    const counterStr = data.total_songs ? `${data.song_index} / ${data.total_songs}` : `${data.song_index}.`;
-    
-    ['np-artist', 'np-artist-mini'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.innerHTML = `<span class="text-danger">${counterStr}</span> | ${data.artist || 'Nepoznato'}`;
-    });
-
-    ['np-title', 'np-title-mini'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.innerText = data.title || '---';
-    });
-
-    // 4. Audio reprodukcija
-    const audio = document.getElementById('audioPlayer');
-    if (!audio) return;
-
-    // Resetiraj prethodni timer ako postoji
-    if (typeof audioStopTimer !== 'undefined' && audioStopTimer) {
-        clearTimeout(audioStopTimer);
-    }
-
-    // VAŽNO: Prvo postavi listenere, onda SRC
-    audio.onloadedmetadata = function () {
-        audio.currentTime = data.start || 0;
-        const volInput = document.getElementById('vol');
-        if (volInput) audio.volume = volInput.value;
-        
-        audio.play().then(() => {
-            // Postavi timer za gašenje nakon trajanja (npr. 15s)
-            audioStopTimer = setTimeout(() => {
-                audio.pause();
-                console.log("Audio automatski zaustavljen.");
-            }, (data.duration || 15) * 1000);
-        }).catch(err => {
-            console.warn("Autoplay blokiran. Klikni bilo gdje na stranicu pa probaj opet.", err);
-        });
-    };
-
-    // Tek sada učitavamo file
-    audio.src = data.url;
+// INIT
+document.addEventListener("DOMContentLoaded", () => {
+    selectRound(1);
+    socket.emit('admin_get_players');
 });
 
-// Liste igrača
-socket.on('admin_player_list_full', (players) => renderPlayerList(players));
-socket.on('admin_update_player_list', (players) => renderPlayerList(players));
-
-socket.on('admin_single_player_update', (d) => {
-    const dot = document.getElementById(`status-dot-${d.name}`);
-    if (dot) updateStatusDot(dot, d.status);
-});
-
-// Podaci za ocjenjivanje (Grading)
-socket.on('admin_receive_grading_data', (data) => {
-    renderGradingTableServerShape(data);
-});
 
 // --- FUNKCIJE ZA KONTROLU (GUMBI) ---
 
@@ -101,8 +34,35 @@ function toggleRegistrations() {
     }
 }
 
-function toggleAutoplay() {
-    // Automatski zatvori prijave ako krene kviz
+function handleQuizControl() {
+    const audio = document.getElementById('audioPlayer');
+    
+    if (!isQuizStarted) {
+        startFirstTime(); // Tvoja postojeća funkcija koja pokreće 'admin_start_auto_run'
+        return;
+    }
+
+    isPaused = !isPaused;
+    // Šaljemo serveru naredbu za pauzu cijelog kviza
+    socket.emit('admin_toggle_pause', { paused: isPaused });
+}
+
+// Slušaj promjenu stanja sa servera (sinkronizacija)
+socket.on('quiz_pause_state', (data) => {
+    isPaused = data.paused;
+    const audio = document.getElementById('audioPlayer');
+    
+    if (isPaused) {
+        audio.pause();
+        updateControlUI(true); // Zeleni gumb "NASTAVI"
+    } else {
+        audio.play();
+        updateControlUI(false); // Crveni gumb "PAUZIRAJ"
+    }
+});
+
+
+function startFirstTime() {
     if (registrationsOpen) toggleRegistrations();
 
     const firstRow = document.querySelector('.song-row:not(.hidden-round)');
@@ -114,18 +74,47 @@ function toggleAutoplay() {
     const firstSongId = firstRow.id.replace('row-', '');
     
     if (confirm("Pokrenuti automatski niz pjesama za ovu rundu?")) {
+        isQuizStarted = true;
         socket.emit('admin_start_auto_run', { 
             id: parseInt(firstSongId, 10), 
             round: currentRound 
         });
+        updateControlUI(false);
+    }
+}
+
+function updateControlUI(isPaused) {
+    const btnText = document.getElementById('control-text');
+    const btnIcon = document.getElementById('control-icon');
+    const btn = document.getElementById('btn-autoplay');
+
+    if (isPaused) {
+        btnText.innerText = "NASTAVI";
+        btnIcon.className = "bi bi-play-fill me-2";
+        btn.classList.replace('btn-outline-danger', 'btn-success');
+    } else {
+        btnText.innerText = "PAUZIRAJ";
+        btnIcon.className = "bi bi-pause-circle-fill me-2";
+        btn.classList.replace('btn-success', 'btn-outline-danger');
+        btn.classList.replace('btn-outline-danger', 'btn-danger');
     }
 }
 
 function stopMusic() {
     if (audioStopTimer) clearTimeout(audioStopTimer);
     const audio = document.getElementById('audioPlayer');
-    if (audio) audio.pause();
-    // Ovdje po potrebi dodati socket.emit('admin_stop_auto_run')
+    if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+    }
+    isQuizStarted = false;
+    const btnText = document.getElementById('control-text');
+    const btnIcon = document.getElementById('control-icon');
+    const btn = document.getElementById('btn-autoplay');
+    
+    btnText.innerText = "KRENI KVIZ";
+    btnIcon.className = "bi bi-play-circle-fill me-2";
+    btn.className = "btn btn-lg btn-outline-danger w-100";
 }
 
 // --- RENDER FUNKCIJE ---
@@ -211,18 +200,6 @@ function generateScoreBtns(id, type, currentScore) {
     return html;
 }
 
-window.LIVE.setScore = function (btn, ansId, type, val) {
-    const group = btn.parentElement;
-    group.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    socket.emit('admin_update_score', { answer_id: ansId, type: type, value: val });
-};
-
-window.LIVE.finalizeRound = function () {
-    if (confirm("Završi ocjenjivanje i osvježi finalnu ljestvicu?")) {
-        socket.emit('admin_finalize_round', { round: currentRound });
-    }
-};
 
 function deletePlayer(name) {
     if (confirm(`Trajno obrisati tim "${name}" i sve njihove odgovore?`)) {
@@ -255,12 +232,6 @@ function setVol(val) {
     if (audio) audio.volume = val;
 }
 
-// INIT
-document.addEventListener("DOMContentLoaded", () => {
-    selectRound(1);
-    socket.emit('admin_get_players');
-});
-
 async function adminSwitchQuiz(id) {
     if (!confirm('Promijeniti aktivni kviz?')) return;
     const res = await fetch('/admin/switch_quiz', {
@@ -271,3 +242,100 @@ async function adminSwitchQuiz(id) {
     const data = await res.json();
     if (data.status === 'ok') location.reload();
 }
+
+// --- SOCKET LISTENERS ---
+socket.on('play_audio', (data) => {
+    // 1. Vizualno označavanje u tablici (skrivena tablica ili grading)
+    document.querySelectorAll('.song-row').forEach(row => {
+        row.classList.remove('table-active', 'border-warning', 'border-3');
+    });
+  
+    const row = document.getElementById('row-' + data.id);
+    if (row) {
+        row.classList.add('table-active', 'border-warning', 'border-3');
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // 2. Aktiviraj DJ konzolu (donja traka)
+    const djConsole = document.getElementById('dj-console');
+    if (djConsole) {
+        djConsole.style.display = 'block'; 
+    }
+
+    // 3. Ažuriraj tekstove (Gornja kartica + Mini player)
+    const counterStr = data.total_songs ? `${data.song_index} / ${data.total_songs}` : `${data.song_index}.`;
+    
+    ['np-artist', 'np-artist-mini'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerHTML = `<span class="text-danger">${counterStr}</span> | ${data.artist || 'Nepoznato'}`;
+    });
+
+    ['np-title', 'np-title-mini'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = data.title || '---';
+    });
+
+    // 4. Audio reprodukcija
+    const audio = document.getElementById('audioPlayer');
+    if (!audio) return;
+
+    // Resetiraj prethodni timer ako postoji
+    if (typeof audioStopTimer !== 'undefined' && audioStopTimer) {
+        clearTimeout(audioStopTimer);
+    }
+
+    // VAŽNO: Prvo postavi listenere, onda SRC
+    audio.onloadedmetadata = function () {
+        audio.currentTime = data.start || 0;
+        const volInput = document.getElementById('vol');
+        if (volInput) audio.volume = volInput.value;
+        
+        audio.play().then(() => {
+            // Postavi timer za gašenje nakon trajanja (npr. 15s)
+            audioStopTimer = setTimeout(() => {
+                audio.pause();
+                console.log("Audio automatski zaustavljen.");
+            }, (data.duration || 15) * 1000);
+        }).catch(err => {
+            console.warn("Autoplay blokiran. Klikni bilo gdje na stranicu pa probaj opet.", err);
+        });
+    };
+
+    // Tek sada učitavamo file
+    audio.src = data.url;
+    isQuizStarted = true;
+    updateControlUI(false);
+});
+
+// Liste igrača
+socket.on('admin_player_list_full', (players) => renderPlayerList(players));
+socket.on('admin_update_player_list', (players) => renderPlayerList(players));
+
+socket.on('admin_single_player_update', (d) => {
+    const dot = document.getElementById(`status-dot-${d.name}`);
+    if (dot) updateStatusDot(dot, d.status);
+});
+
+// Podaci za ocjenjivanje (Grading)
+socket.on('admin_receive_grading_data', (data) => {
+    renderGradingTableServerShape(data);
+});
+
+
+// LIVE FUNKCIJE ZA KONTROLU OCJENJIVANJA
+
+window.LIVE.setScore = function (btn, ansId, type, val) {
+    const group = btn.parentElement;
+    group.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    socket.emit('admin_update_score', { answer_id: ansId, type: type, value: val });
+};
+
+window.LIVE.finalizeRound = function () {
+    if (confirm("Završi ocjenjivanje i osvježi finalnu ljestvicu?")) {
+        socket.emit('admin_finalize_round', { round: currentRound });
+    }
+};
+
+
+

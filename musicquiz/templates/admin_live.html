@@ -42,7 +42,14 @@
       <select id="liveQuizSwitcher" class="form-select bg-black text-warning border-secondary fw-bold" onchange="adminSwitchQuiz(this.value)">
         {% if all_quizzes %}
           {% for q in all_quizzes %}
-            <option value="{{ q.id }}" {% if quiz and q.id == quiz.id %}selected{% endif %}>#{{ q.id }} {{ q.title }}</option>
+            {% set date_display = q.date_created %}
+            {% if q.date_created %}
+              {% set parts = q.date_created.split('-') %}
+              {% if parts|length == 3 %}
+                {% set date_display = parts[2] ~ '.' ~ parts[1] ~ '.' ~ parts[0] %}
+              {% endif %}
+            {% endif %}
+            <option value="{{ q.id }}" {% if quiz and q.id == quiz.id %}selected{% endif %}>#{{ q.id }} {{ q.title }} ({{ date_display }})</option>
           {% endfor %}
         {% endif %}
       </select>
@@ -125,8 +132,9 @@
         <div class="card-body p-3 text-center">
           <div id="np-artist" class="fw-bold text-warning mb-0">Nema aktivne pjesme</div>
           <div id="np-title" class="text-white small mb-3">---</div>
-          <button id="btn-autoplay" class="btn btn-lg btn-outline-danger w-100" onclick="toggleAutoplay()">
-            <i class="bi bi-play-circle-fill me-2"></i>KRENI KVIZ
+          <button id="btn-autoplay" class="btn btn-lg btn-outline-danger w-100" onclick="handleQuizControl()">
+            <i id="control-icon" class="bi bi-play-circle-fill me-2"></i>
+            <span id="control-text">KRENI KVIZ</span>
           </button>
         </div>
       </div>

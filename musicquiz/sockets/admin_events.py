@@ -9,7 +9,8 @@ import time
 
 # Globalno stanje kviza
 quiz_settings = {
-    "registrations_open": False
+    "registrations_open": False,
+    "quiz_paused": False
 }
 
 # --- POMOĆNE FUNKCIJE ---
@@ -77,12 +78,20 @@ def auto_quiz_sequence(song_id, round_num, app):
             "song_index": idx,
             "total_songs": total_songs,
             "artist": song.artist,
-            "title": song.title
+            "title": song.title,
+            "round": round_num
         })
         socketio.emit("player_unlock_input", {"song_id": song.id, "song_index": idx, "round": round_num})
         socketio.emit("tv_start_timer", {"seconds": song.duration, "round": round_num})
 
-        time.sleep(song.duration)
+        # DINAMIČKO ČEKANJE (PJESMA)
+        elapsed = 0
+        while elapsed < song.duration:
+            if not quiz_settings["quiz_paused"]:
+                time.sleep(1)
+                elapsed += 1
+            else:
+                time.sleep(0.5) # Provjeravaj češće je li pauza gotova
 
         # 2. ZAKLJUČAJ I PRIKAŽI TOČAN ODGOVOR
         socketio.emit("player_lock_input")
@@ -90,6 +99,7 @@ def auto_quiz_sequence(song_id, round_num, app):
         socketio.emit("screen_show_correct", {
             "artist": song.artist,
             "title": song.title,
+            "round": round_num,
             "duration": 15
         })
         
@@ -103,7 +113,14 @@ def auto_quiz_sequence(song_id, round_num, app):
         # Osvježi ljestvicu uživo nakon svake pjesme
         calculate_and_broadcast_leaderboard()
 
-        time.sleep(15)
+        # DINAMIČKO ČEKANJE (PJESMA)
+        elapsed = 0
+        while elapsed < song.duration:
+            if not quiz_settings["quiz_paused"]:
+                time.sleep(1)
+                elapsed += 1
+            else:
+                time.sleep(0.5)
 
         # 4. SLJEDEĆA PJESMA ILI KRAJ RUNDE
         next_song = Song.query.filter(
@@ -137,6 +154,12 @@ def register_admin_events(socketio):
         emit("play_audio", {"url": f"/stream_song/{s.filename}", "start": s.start_time, "duration": s.duration, "id": s.id}, broadcast=True)
         emit("player_unlock_input", payload, broadcast=True)
         emit("tv_start_timer", {"seconds": s.duration, "round": s.round_number}, broadcast=True)
+
+    @socketio.on("admin_toggle_pause")
+    def handle_toggle_pause(data):
+        quiz_settings["quiz_paused"] = data.get("paused", False)
+        # Obavijesti sve (Admina, TV, Igrače) da je kviz pauziran/nastavljen
+        socketio.emit("quiz_pause_state", {"paused": quiz_settings["quiz_paused"]})
 
     @socketio.on("admin_finalize_round")
     def handle_manual_finalize(data):

@@ -24,7 +24,6 @@ def create_app():
     register_sockets(socketio)
     return app
 
-
 if __name__ == "__main__":
     app = create_app()
     import socket

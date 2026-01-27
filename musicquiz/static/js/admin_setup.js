@@ -80,26 +80,21 @@ function addSongToTableHTML(s) {
 
 document.addEventListener("DOMContentLoaded", () => {
   try { SETUP.initWaveSurfer(); } catch (e) { console.error("WaveSurfer init error:", e); }
-
-  // Sortable
   const el = document.getElementById('quizSongsList');
   if (el && typeof Sortable !== 'undefined') {
     Sortable.create(el, {
       animation: 150,
       handle: '.q-row',
       onEnd: function (evt) {
-        // TODO: opcionalno spremi novi redoslijed na server
       }
     });
   }
-
-  // Zadnja putanja iz localStorage
   const savedPath = localStorage.getItem('rockQuiz_lastPath');
   if (savedPath) {
     const input = document.getElementById('localFolderPath');
     if (input) {
       input.value = savedPath;
-      SETUP.scanFolder(); // auto-scan
+      SETUP.scanFolder();
     }
   }
 });
@@ -108,12 +103,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
 SETUP.initWaveSurfer = function () {
   if (typeof WaveSurfer === 'undefined') return;
-
   if (wavesurfer) {
     try { wavesurfer.destroy(); } catch (_) {}
     wavesurfer = null;
   }
-
   wavesurfer = WaveSurfer.create({
     container: "#waveform",
     waveColor: '#666',
@@ -123,15 +116,11 @@ SETUP.initWaveSurfer = function () {
     normalize: true,
     backend: 'MediaElement'
   });
-
-  // Sigurnost: ukloni prethodne handler-e ako postoje
   wavesurfer.un && wavesurfer.un('timeupdate');
-
   wavesurfer.on('timeupdate', (t) => {
     const lbl = document.getElementById('lblCurrent');
     if (lbl) lbl.innerText = t.toFixed(1) + 's';
   });
-
   wavesurfer.on('play', () => {
     const i = document.querySelector('#btnPlayPause i');
     if (i) i.className = 'bi bi-pause-fill';
@@ -140,13 +129,11 @@ SETUP.initWaveSurfer = function () {
     const i = document.querySelector('#btnPlayPause i');
     if (i) i.className = 'bi bi-play-fill';
   });
-
   const volSlider = document.getElementById('wsVolume');
   if (volSlider) {
     wavesurfer.setVolume(volSlider.value);
     volSlider.oninput = function () { wavesurfer.setVolume(this.value); };
   }
-
   if (window.WaveSurfer?.Regions) {
     wsRegions = wavesurfer.registerPlugin(window.WaveSurfer.Regions.create());
     wsRegions.on('region-updated', (region) => {
@@ -160,7 +147,6 @@ SETUP.initWaveSurfer = function () {
       region.play();
     });
   }
-
   const btn = document.getElementById('btnPlayPause');
   if (btn) btn.onclick = () => wavesurfer.playPause();
 };
@@ -172,24 +158,17 @@ SETUP.openEditor = function (id, filename, artist, title, start, dur) {
     alert("Ovo nije audio pitanje (nema MP3).");
     return;
   }
-
   if (!wavesurfer) SETUP.initWaveSurfer();
   currentEditingId = id;
-
   const panel = document.getElementById('editorPanel');
   if (panel) panel.style.display = 'block';
-
   document.getElementById('editId').value = id;
   document.getElementById('editArtist').value = artist || '';
   document.getElementById('editTitle').value = title || '';
-
   document.querySelectorAll('.q-row').forEach(r => r.classList.remove('editing-row'));
   const row = document.getElementById('qrow-' + id);
   if (row) row.classList.add('editing-row');
-
   wavesurfer.load('/stream_song/' + filename);
-
-  // osiguraj da 'ready' handler postoji samo jednom
   wavesurfer.once('ready', () => {
     if (wsRegions) {
       wsRegions.clearRegions();
@@ -205,7 +184,6 @@ SETUP.openEditor = function (id, filename, artist, title, start, dur) {
       wavesurfer.setTime(st);
     }
   });
-
   wavesurfer.once('error', (e) => {
     console.error("WaveSurfer error:", e);
     alert("Ne mogu učitati pjesmu: " + filename);
@@ -221,10 +199,8 @@ SETUP.closeEditor = function () {
 
 SETUP.saveChanges = async function () {
   if (!currentEditingId) return;
-
   const artist = document.getElementById('editArtist').value;
   const title = document.getElementById('editTitle').value;
-
   let start = 0, duration = 15;
   if (wsRegions) {
     const regions = wsRegions.getRegions();
@@ -233,7 +209,6 @@ SETUP.saveChanges = async function () {
       duration = regions[0].end - regions[0].start;
     }
   }
-
   try {
     const res = await fetch("/admin/update_song", {
       method: "POST",
@@ -258,6 +233,7 @@ SETUP.saveChanges = async function () {
   }
 };
 
+
 // --- MANIPULACIJA PJESMAMA ---
 
 SETUP.removeSong = async function (id) {
@@ -280,6 +256,15 @@ SETUP.createNewQuiz = async function () {
   });
   location.reload();
 };
+
+SETUP.switchQuiz = async function (id) {
+  await fetch("/admin/switch_quiz", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ id })
+  });
+  location.reload();
+}
 
 SETUP.filterView = function (round, btn) {
   // vizualno
