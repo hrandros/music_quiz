@@ -7,9 +7,9 @@ let audioStopTimer = null;
 let isQuizStarted = false;
 let isPaused = false;
 
+// INIT
 window.LIVE = window.LIVE || {};
 
-// INIT
 document.addEventListener("DOMContentLoaded", () => {
     selectRound(1);
     socket.emit('admin_get_players');
@@ -18,53 +18,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
 // --- FUNKCIJE ZA KONTROLU (GUMBI) ---
 
-function toggleRegistrations() {
-    registrationsOpen = !registrationsOpen;
+function unlockRegistrations() {
     const btn = document.getElementById('reg-toggle-btn');
     if (!btn) return;
 
-    if (registrationsOpen) {
-        btn.classList.replace('btn-info', 'btn-success');
-        btn.innerHTML = '<i class="bi bi-lock-fill me-2"></i>ZATVORI PRIJAVE';
-        socket.emit('admin_toggle_registrations', { open: true });
-    } else {
-        btn.classList.replace('btn-success', 'btn-info');
-        btn.innerHTML = '<i class="bi bi-unlock-fill me-2"></i>OTVORI PRIJAVE';
-        socket.emit('admin_toggle_registrations', { open: false });
-    }
+    socket.emit('admin_toggle_registrations', { open: true });
+
+    btn.disabled = true;
+    btn.classList.replace('btn-info', 'btn-secondary');
+    btn.innerHTML = '<i class="bi bi-check-all me-2"></i>PRIJAVE SU OTVORENE';
 }
 
-function handleQuizControl() {
-    const audio = document.getElementById('audioPlayer');
-    
-    if (!isQuizStarted) {
-        startFirstTime(); // Tvoja postojeća funkcija koja pokreće 'admin_start_auto_run'
-        return;
-    }
-
-    isPaused = !isPaused;
-    // Šaljemo serveru naredbu za pauzu cijelog kviza
-    socket.emit('admin_toggle_pause', { paused: isPaused });
-}
-
-// Slušaj promjenu stanja sa servera (sinkronizacija)
-socket.on('quiz_pause_state', (data) => {
-    isPaused = data.paused;
-    const audio = document.getElementById('audioPlayer');
-    
-    if (isPaused) {
-        audio.pause();
-        updateControlUI(true); // Zeleni gumb "NASTAVI"
-    } else {
-        audio.play();
-        updateControlUI(false); // Crveni gumb "PAUZIRAJ"
-    }
-});
-
-
+// 2. Modifikacija startFirstTime da NE dira prijave
 function startFirstTime() {
-    if (registrationsOpen) toggleRegistrations();
-
     const firstRow = document.querySelector('.song-row:not(.hidden-round)');
     if (!firstRow) {
         alert("Nema pjesama u ovoj rundi!");
@@ -81,6 +47,16 @@ function startFirstTime() {
         });
         updateControlUI(false);
     }
+}
+
+function handleQuizControl() {
+    const audio = document.getElementById('audioPlayer');
+    if (!isQuizStarted) {
+        startFirstTime();
+        return;
+    }
+    isPaused = !isPaused;
+    socket.emit('admin_toggle_pause', { paused: isPaused });
 }
 
 function updateControlUI(isPaused) {
@@ -144,31 +120,36 @@ function renderPlayerList(players) {
 }
 
 function renderGradingTableServerShape(data) {
-    const tbody = document.getElementById('gradingBody');
+    const tbody = document.getElementById('gradingBody'); // Provjeri imaš li ovaj ID u HTML-u
     if (!tbody) return;
     tbody.innerHTML = "";
 
     if (!data || data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-muted">Čekam prve odgovore...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="3" class="p-4 text-center text-muted">Čekam prve odgovore...</td></tr>';
         return;
     }
 
-    data.sort((a, b) => (a.song_index !== b.song_index ? a.song_index - b.song_index : a.player.localeCompare(b.player)));
+    // Sortiranje: prvo po pjesmi, pa po imenu igrača
+    data.sort((a, b) => {
+        if (a.song_id !== b.song_id) return a.song_id - b.song_id;
+        return a.player_name.localeCompare(b.player_name);
+    });
 
     data.forEach(row => {
         const tr = document.createElement('tr');
-        tr.className = 'align-middle';
+        tr.className = 'align-middle border-bottom border-secondary';
         tr.innerHTML = `
-            <td class="ps-3"><div class="fw-bold text-info">${row.player}</div><small class="text-secondary">#${row.song_index}</small></td>
-            <td>
-                <div class="text-white small mb-1">${row.artist_guess || '-'}</div>
-                ${generateScoreBtns(row.answer_id, 'artist', row.artist_pts)}
-                <div class="extra-small text-success mt-1">✓ ${row.correct_artist}</div>
+            <td class="ps-3">
+                <div class="fw-bold text-info">${row.player_name}</div>
+                <small class="text-secondary">Pjesma ID: ${row.song_id}</small>
             </td>
             <td>
-                <div class="text-white small mb-1">${row.title_guess || '-'}</div>
-                ${generateScoreBtns(row.answer_id, 'title', row.title_pts)}
-                <div class="extra-small text-success mt-1">✓ ${row.correct_title}</div>
+                <div class="text-white small mb-1">Izvođač: <strong>${row.artist_guess || '-'}</strong></div>
+                ${generateScoreBtns(row.id, 'artist', row.artist_points)}
+            </td>
+            <td>
+                <div class="text-white small mb-1">Naslov: <strong>${row.title_guess || '-'}</strong></div>
+                ${generateScoreBtns(row.id, 'title', row.title_points)}
             </td>
         `;
         tbody.appendChild(tr);
@@ -305,6 +286,20 @@ socket.on('play_audio', (data) => {
     audio.src = data.url;
     isQuizStarted = true;
     updateControlUI(false);
+});
+
+// Slušaj promjenu stanja sa servera (sinkronizacija)
+socket.on('quiz_pause_state', (data) => {
+    isPaused = data.paused;
+    const audio = document.getElementById('audioPlayer');
+    
+    if (isPaused) {
+        audio.pause();
+        updateControlUI(true); // Zeleni gumb "NASTAVI"
+    } else {
+        audio.play();
+        updateControlUI(false); // Crveni gumb "PAUZIRAJ"
+    }
 });
 
 // Liste igrača

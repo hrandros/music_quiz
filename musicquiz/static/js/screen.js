@@ -37,7 +37,7 @@ socket.on('play_audio', (data) => {
     
     // Reset teksta i vizuala
     const songDisplay = document.getElementById('songDisplay');
-    songDisplay.innerText = "PJESMA U TIJEKU...";
+    songDisplay.innerText = `${data.id || ''}. PJESMA U TIJEKU...`;
     songDisplay.classList.remove('d-none');
     
     document.getElementById('statusLabel').innerText = `RUNDA ${data.round || ''}`;
@@ -56,14 +56,15 @@ socket.on('screen_show_correct', (data) => {
     clearInterval(timerInterval);
     
     // Sakrij elemente igre
-    document.getElementById('timerWrapper').classList.add('d-none');
     document.getElementById('visualizer').classList.add('d-none');
     document.getElementById('songDisplay').classList.add('d-none');
+    document.getElementById('statusLabel').innerText = `${data.id || ''}. PJESMA:`;
     
     // Pokaži odgovor
     const ansKey = document.getElementById('ansKey');
     const ansContainer = document.getElementById('correct-answer-display');
-    
+    document.getElementById('timerWrapper').classList.remove('d-none');
+    startTimer(15);
     if (ansKey) {
         ansKey.innerText = `${data.artist} - ${data.title}`;
         ansKey.classList.remove('d-none');
@@ -138,13 +139,22 @@ function updateTimerUI() {
     if (!ring || !text) return;
 
     const r = Math.max(0, currentRemaining);
-    text.innerText = r;
+    text.textContent = String(r);
 
     // SVG krug logika (C = 2 * r * PI)
     const C = 339.29; 
     const pct = r / currentTotal;
     ring.style.strokeDashoffset = C - (pct * C);
 
-    // Boja: Crvena -> Žuta u zadnjih 5s
-    ring.style.stroke = r <= 5 ? "#ffc107" : "#dc3545";
+    // LOGIKA ZA BOJE:
+    if (pct > 0.5) {
+        // Više od 50% vremena - ZELENA
+        ring.style.stroke = "#198754"; 
+    } else if (pct > 0.2) {
+        // Između 20% i 50% vremena - ŽUTA
+        ring.style.stroke = "#ffc107";
+    } else {
+        // Ispod 20% vremena - CRVENA
+        ring.style.stroke = "#dc3545";
+    }
 }

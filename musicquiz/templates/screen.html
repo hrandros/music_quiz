@@ -48,6 +48,10 @@
   #qrcode img {
     margin: 0 auto;
   }
+
+  #timerRing {
+    transition: stroke-dashoffset 1s linear, stroke 0.5s ease;
+  }
 </style>
 {% endblock %}
 
@@ -113,7 +117,7 @@
           <i class="bi bi-trophy-fill text-warning me-2"></i> POREDAK
         </h2>
 
-        <div id="lbContent" class="flex-grow-1 overflow-hidden mt-2 animate__animated animate__fadeIn">
+        <div id="leaderboard-body" class="flex-grow-1 overflow-hidden mt-2 animate__animated animate__fadeIn">
             </div>
       </div>
     </div>
