@@ -16,6 +16,12 @@
 <style>
   .song-item:hover { background-color: #222 !important; cursor: pointer; }
   .editing-row { border: 2px solid var(--mq-primary) !important; background: #330000 !important; }
+  /* Waveform marks — zajednički stil (u main.css) */
+  #waveform { 
+    background: #111; 
+    border: 1px solid #333; 
+    border-radius: 4px;
+    position: relative;}
 
 </style>
 {% endblock %}
@@ -190,18 +196,21 @@
               <button class="btn btn-light btn-sm rounded-circle" id="btnPlayPause" aria-label="Play/Pause">
                 <i class="bi bi-play-fill" aria-hidden="true"></i>
               </button>
-              <button class="btn btn-outline-light btn-sm" id="btnZoomOut" title="Zumiraj manje">-</button>
-              <button class="btn btn-outline-light btn-sm" id="btnZoomIn" title="Zumiraj više">+</button>
-              <button class="btn btn-outline-light btn-sm" id="btnZoomReset" title="Resetiraj zum">⤢</button>
             </div>
             <span id="lblCurrent" class="font-monospace text-info me-3 small">0.0s</span>
             <div class="border-start border-secondary ps-2 lh-1">
               <div class="small text-muted" style="font-size:0.7em">START: <span id="lblStart" class="text-white">0.0</span>s</div>
               <div class="small text-muted" style="font-size:0.7em">TRAJANJE: <span id="lblDur" class="text-white">30.0</span>s</div>
             </div>
+            <div class="ms-3 border-start border-secondary ps-2 lh-1">
+              <button class="btn btn-outline-light btn-sm" id="btnZoomOut" title="Zumiraj manje">-</button>
+              <button class="btn btn-outline-light btn-sm" id="btnZoomIn" title="Zumiraj više">+</button>
+              <button class="btn btn-outline-light btn-sm" id="btnZoomReset" title="Resetiraj zum">⤢</button>
+            </div>
           </div>
 
           <div class="d-flex align-items-center gap-2">
+            <i class="bi bi-volume-up-fill text-white" style="font-size:1.2rem;"></i>
             <input type="range" id="wsVolume" class="form-range" min="0" max="1" step="0.1" value="0.3" style="width:60px" aria-label="Glasnoća u editoru">
             <button class="btn btn-success btn-sm fw-bold" onclick="SETUP.saveChanges()">SPREMI</button>
           </div>

@@ -2,7 +2,6 @@ const SETUP = {};
 let wavesurfer = null;
 let wsRegions = null;
 let currentEditingId = null;
-// pixels per second zoom level (0 = fit)
 SETUP._zoomPx = 0;
 
 document.addEventListener('DOMContentLoaded', function () {
@@ -17,7 +16,27 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 });
-// --- HELPERS ---
+
+document.addEventListener("DOMContentLoaded", () => {
+  try { SETUP.initWaveSurfer(); } catch (e) { console.error("WaveSurfer init error:", e); }
+  const el = document.getElementById('quizSongsList');
+  if (el && typeof Sortable !== 'undefined') {
+    Sortable.create(el, {
+      animation: 150,
+      handle: '.q-row',
+      onEnd: function (evt) {
+      }
+    });
+  }
+  const savedPath = localStorage.getItem('rockQuiz_lastPath');
+  if (savedPath) {
+    const input = document.getElementById('localFolderPath');
+    if (input) {
+      input.value = savedPath;
+      SETUP.scanFolder();
+    }
+  }
+});
 
 function escapeHtml(text) {
   if (text == null) return "";
@@ -130,31 +149,6 @@ function generateQR() {
   setTimeout(() => window.print(), 500);
 }
 
-  // Datepicker initialized in template with flatpickr (keeps ISO value, shows dd.mm.YYYY)
-
-// --- INIT ---
-
-document.addEventListener("DOMContentLoaded", () => {
-  try { SETUP.initWaveSurfer(); } catch (e) { console.error("WaveSurfer init error:", e); }
-  const el = document.getElementById('quizSongsList');
-  if (el && typeof Sortable !== 'undefined') {
-    Sortable.create(el, {
-      animation: 150,
-      handle: '.q-row',
-      onEnd: function (evt) {
-      }
-    });
-  }
-  const savedPath = localStorage.getItem('rockQuiz_lastPath');
-  if (savedPath) {
-    const input = document.getElementById('localFolderPath');
-    if (input) {
-      input.value = savedPath;
-      SETUP.scanFolder();
-    }
-  }
-});
-
 // --- WAVESURFER ---
 
 SETUP.initWaveSurfer = function () {
@@ -220,38 +214,32 @@ SETUP.setZoomPx = function(px) {
   SETUP._zoomPx = Math.max(0, px || 0);
   if (!wavesurfer) return;
   try {
-    console.debug && console.debug('SETUP.setZoomPx', { requestedPx: px, effectivePx: SETUP._zoomPx, hasZoom: typeof(wavesurfer.zoom) === 'function' });
+    console.debug && console.debug('SETUP.setZoomPx', 
+      { requestedPx: px, effectivePx: SETUP._zoomPx, hasZoom: typeof(wavesurfer.zoom) === 'function' });
     if (typeof wavesurfer.zoom === 'function') {
-      // wavesurfer.zoom expects pixels per second (v7)
       wavesurfer.zoom(SETUP._zoomPx);
-      // After zoom, center view around selected region (if any) or current time
       try {
         const dur = wavesurfer.getDuration() || 0;
         if (dur > 0) {
           let centerTime = dur / 2;
-          // If there's an active region, center on its midpoint
-          // Prefer selected region, then stored song region
           let r = null;
           if (wsRegions) {
             const regions = Object.values(wsRegions.list || {});
             r = regions.find(rr => rr.selected) || regions[0];
           }
-          if (r) {
-            centerTime = (r.start + r.end) / 2;
-          } else if (SETUP._currentSongRegion && SETUP._currentSongRegion.duration > 0) {
+          if (r) 
+            {centerTime = (r.start + r.end) / 2;
+              start = r.start;
+            } 
+          else if (SETUP._currentSongRegion && SETUP._currentSongRegion.duration > 0) {
             centerTime = (SETUP._currentSongRegion.start + SETUP._currentSongRegion.duration) / 2;
+            start = SETUP._currentSongRegion.start;
           }
-          // If no region, use currentTime if available
           try { const ct = wavesurfer.getCurrentTime(); if (ct) centerTime = ct; } catch (e) {}
-
-          // Seek to center ratio; seekTo will also adjust scroll/viewport
           const ratio = Math.max(0, Math.min(1, centerTime / dur));
-          // preserve paused state
           const wasPlaying = !wavesurfer.paused;
           wavesurfer.pause();
-          wavesurfer.seekTo(ratio);
-
-          // Best-effort center: compute total pixel width and scroll so centerTime is centered
+          wavesurfer.seekTo(start);
           setTimeout(() => {
             try {
               const container = document.getElementById('waveform');
@@ -261,9 +249,7 @@ SETUP.setZoomPx = function(px) {
               const centerPx = (ratio) * totalWidth;
               const visibleW = container ? container.clientWidth : 800;
               if (wrapper) wrapper.scrollLeft = Math.max(0, Math.floor(centerPx - visibleW / 2));
-              // try to call renderer recenter if available
               try { if (typeof renderer.recenter === 'function') renderer.recenter(); } catch(e) {}
-              // render time marks after zoom/resize
               try { SETUP.queueRenderMarks(); } catch (e) { /* ignore */ }
             } catch (e) { /* ignore */ }
           }, 50);
@@ -272,7 +258,6 @@ SETUP.setZoomPx = function(px) {
         console.warn('Center after zoom failed', e);
       }
     } else if (typeof wavesurfer.params !== 'undefined' && wavesurfer.params.partialRender) {
-      // no-op fallback: try to redraw
       wavesurfer.drawer && wavesurfer.drawer.recenter && wavesurfer.drawer.recenter();
     } else {
       console.warn('WaveSurfer.zoom not available in this build');
@@ -284,23 +269,22 @@ SETUP.setZoomPx = function(px) {
 
 SETUP.zoomIn = function() {
   console.debug && console.debug('SETUP.zoomIn called', { currentPx: SETUP._zoomPx });
-  // If a region is selected, zoom to that region so it fills the viewport
-  if (wsRegions) {
-    const regions = Object.values(wsRegions.list || {});
+
+  if (wsRegions && typeof wsRegions.getRegions === 'function') {
+    const regions = wsRegions.getRegions();
     const sel = regions.find(r => r.selected) || regions[0];
-    if (sel) {
-      return SETUP.zoomToRegion(sel);
-    }
+    if (sel) return SETUP.zoomToRegion(sel);
   }
-  // If no interactive region, but we have song clip info, zoom to that clip
+
   if (SETUP._currentSongRegion && SETUP._currentSongRegion.duration > 0) {
     return SETUP.zoomToClip(SETUP._currentSongRegion.start, SETUP._currentSongRegion.duration);
   }
-  // Fallback incremental zoom
+
   const step = 40;
   const next = SETUP._zoomPx === 0 ? 40 : SETUP._zoomPx + step;
   SETUP.setZoomPx(next);
 };
+
 
 SETUP.zoomOut = function() {
   const step = 10;
@@ -309,16 +293,14 @@ SETUP.zoomOut = function() {
 };
 
 SETUP.zoomReset = function() {
-  // Reset to fit entire waveform
   if (!wavesurfer) return SETUP.setZoomPx(0);
   try {
     const dur = wavesurfer.getDuration() || 1;
     const container = document.getElementById('waveform');
     const width = container ? container.clientWidth : (wavesurfer.drawer && wavesurfer.drawer.wrapper ? wavesurfer.drawer.wrapper.clientWidth : 800);
     const defaultPx = Math.max(0, Math.floor(width / dur));
-    SETUP.setZoomPx(defaultPx);
-    // center on middle
-    wavesurfer.seekTo(0.5);
+    SETUP.setZoomPx(0);
+    wavesurfer.setTime(0);
   } catch (e) {
     SETUP.setZoomPx(0);
   }
@@ -332,15 +314,11 @@ SETUP.zoomToRegion = function(region) {
     const clipDur = Math.max(0.001, (region.end - region.start));
     const container = document.getElementById('waveform');
     const width = container ? container.clientWidth : (wavesurfer.drawer && wavesurfer.drawer.wrapper ? wavesurfer.drawer.wrapper.clientWidth : 800);
-
-    // add padding (10s each side) but clamp to song bounds
-    const pad = 10; // seconds of padding on each side
+    const pad = 10;
     const paddedStart = Math.max(0, region.start - pad);
     const paddedEnd = Math.min(dur, region.end + pad);
     const paddedDur = Math.max(0.001, (paddedEnd - paddedStart));
-    // pixels per second so that padded clip fills the container: width / paddedDur
     let pxPerSec = width / paddedDur;
-    // cap px/sec to avoid extreme zoom values
     const MAX_PX_PER_SEC = 3000;
     pxPerSec = Math.min(pxPerSec, MAX_PX_PER_SEC);
     console.debug && console.debug('SETUP.zoomToRegion pxPerSec', { width, paddedDur, pxPerSec, MAX_PX_PER_SEC });
@@ -352,7 +330,7 @@ SETUP.zoomToRegion = function(region) {
     // Seek to center without resuming playback
     const wasPlaying = !wavesurfer.paused;
     wavesurfer.pause();
-    wavesurfer.seekTo(ratio);
+    wavesurfer.seekTo(region.start);
     if (wasPlaying) { /* keep paused to avoid autoplay */ }
     // store current zoom px
     SETUP._zoomPx = pxPerSec;
@@ -392,12 +370,11 @@ SETUP.zoomToClip = function(start, clipDur) {
     pxPerSec = Math.min(pxPerSec, MAX_PX_PER_SEC);
     console.debug && console.debug('SETUP.zoomToClip pxPerSec', { width, paddedDur, pxPerSec, MAX_PX_PER_SEC });
     if (typeof wavesurfer.zoom === 'function') wavesurfer.zoom(pxPerSec);
-
     const centerTime = paddedStart + paddedDur / 2;
     const ratio = Math.max(0, Math.min(1, centerTime / dur));
     const wasPlaying = !wavesurfer.paused;
     wavesurfer.pause();
-    wavesurfer.seekTo(ratio);
+    wavesurfer.seekTo(start);
     if (wasPlaying) { }
     SETUP._zoomPx = pxPerSec;
     setTimeout(() => {
@@ -799,13 +776,11 @@ SETUP._getWaveElements = function () {
 
 SETUP._getPxPerSec = function (dur) {
   const { container } = SETUP._getWaveElements();
-  // Ako je postavljen zoomPx, koristi njega; inače „fit to width“
   if (SETUP._zoomPx && SETUP._zoomPx > 0) return SETUP._zoomPx;
   const cw = container ? container.clientWidth : 0;
   return dur > 0 && cw > 0 ? cw / dur : 0;
 };
 
-// Debounce preko RAF-a da se markeri crtaju tek kad DOM završi reflow
 SETUP.queueRenderMarks = function () {
   if (SETUP._marksRaf) cancelAnimationFrame(SETUP._marksRaf);
   SETUP._marksRaf = requestAnimationFrame(() => {
@@ -813,43 +788,35 @@ SETUP.queueRenderMarks = function () {
   });
 };
 
-// Draw time markers (every 10s) inside WaveSurfer wrapper
-// Zamijeni postojeću implementaciju ovime:
 SETUP.renderTimeMarks = function () {
   if (!wavesurfer) return;
   try {
     const dur = wavesurfer.getDuration() || 0;
     if (dur <= 0) return;
-
     const { container, wrapper } = SETUP._getWaveElements();
     const host = (wrapper || container);
     if (!host) return;
-
     const hostPos = window.getComputedStyle(host).position;
     if (!hostPos || hostPos === 'static') host.style.position = 'relative';
-
-    // Osiguraj kontejner za markere
     let marksContainer = host.querySelector('.ws-time-marks');
     if (!marksContainer) {
       marksContainer = document.createElement('div');
       marksContainer.className = 'ws-time-marks';
+      marksContainer.style.position = 'absolute';
+      marksContainer.style.top = '0';
+      marksContainer.style.left = '0';
+      marksContainer.style.height = '100%';
+      marksContainer.style.pointerEvents = 'none';
+      marksContainer.style.zIndex = '50';
       host.appendChild(marksContainer);
     }
-
-    // Izračun pouzdane širine vremenske osi
     const pxPerSec = SETUP._getPxPerSec(dur);
-    // totalWidth barem koliko je vidljiva širina kontejnera (za "fit to width")
     const visibleW = container ? container.clientWidth : (host.clientWidth || 0);
     const computedWidth = Math.max(visibleW, Math.floor(dur * pxPerSec));
     marksContainer.style.width = computedWidth + 'px';
-
-    // Priprema vidljivog prozora za odlučivanje o labelama
     const visibleLeft = wrapper ? wrapper.scrollLeft : (container ? container.scrollLeft : 0);
-
-    // Očisti prethodne markere
     marksContainer.innerHTML = '';
-
-    const step = 10; // svake 10s
+    const step = 10;
     const minLabelPx = 60;
     let lastLabelPx = -Infinity;
 
@@ -864,8 +831,6 @@ SETUP.renderTimeMarks = function () {
       mark.style.borderLeft = '1px solid rgba(255,255,255,0.18)';
       mark.style.pointerEvents = 'none';
       marksContainer.appendChild(mark);
-
-      // Labelu renderiraj samo kad ima mjesta i kad je u vidljivom području (+/-20px margina)
       if (
         leftPx >= (visibleLeft - 20) &&
         leftPx <= (visibleLeft + visibleW + 20) &&
@@ -882,9 +847,6 @@ SETUP.renderTimeMarks = function () {
         lbl.style.fontSize = '11px';
         lbl.style.textAlign = 'center';
         lbl.style.pointerEvents = 'none';
-        //lbl.style.background = 'rgba(0,0,0,0.75)';
-        //lbl.style.padding = '2px 6px';
-        //lbl.style.borderRadius = '4px';
         lbl.style.whiteSpace = 'nowrap';
         const mm = Math.floor(t / 60).toString().padStart(2, '0');
         const ss = Math.floor(t % 60).toString().padStart(2, '0');
@@ -893,8 +855,6 @@ SETUP.renderTimeMarks = function () {
         lastLabelPx = leftPx;
       }
     }
-
-    // Scroll listener (jednom) da labelice prate pomak
     if (wrapper && !marksContainer._hasScrollListener) {
       marksContainer._hasScrollListener = true;
       wrapper.addEventListener('scroll', function () {
@@ -909,7 +869,6 @@ SETUP.renderTimeMarks = function () {
   }
 };
 
-// update marks on window resize so positions stay correct
 window.addEventListener('resize', function () {
   try { SETUP.queueRenderMarks(); } catch (e) {}
 });
