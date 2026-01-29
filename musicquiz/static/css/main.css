@@ -129,9 +129,6 @@ h1, h2, h3, h4, h5, .navbar-brand, .btn, th {
     background: #000;
 }
 
-
-
-
 /* === UTILITIES DODACI (sigurno, bez utjecaja na postojeće) === */
 
 /* 1) Fade-in koji koristiš u <main> i player formama */
@@ -224,3 +221,50 @@ h1, h2, h3, h4, h5, .navbar-brand, .btn, th {
   overflow-y: auto; 
   background: #000; 
   border: 1px solid #333;}
+
+  
+/* Slider with filled track */
+#wsVolume {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  outline: none;
+  background: #444; /* fallback */
+}
+
+/* Thumb (Chrome/Edge/Safari) */
+#wsVolume::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #28a745; /* Bootstrap success */
+  border: 2px solid rgba(255,255,255,0.85);
+  cursor: pointer;
+  margin-top: -4px; /* align thumb vertically */
+}
+
+/* Track (Chrome/Edge/Safari) */
+#wsVolume::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+}
+
+/* Thumb (Firefox) */
+#wsVolume::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #28a745;
+  border: 2px solid rgba(255,255,255,0.85);
+  cursor: pointer;
+}
+
+/* Track (Firefox) */
+#wsVolume::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: transparent; /* gradient ide na input */
+}

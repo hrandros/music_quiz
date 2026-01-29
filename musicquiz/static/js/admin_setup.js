@@ -17,6 +17,24 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 });
 
+
+document.addEventListener("DOMContentLoaded", () => {
+  const repoSearch = document.getElementById('repoSearch');
+  if (repoSearch) {
+    // filtriraj dok tipka (debounce da bude glatko i na velikim listama)
+    let t = null;
+    repoSearch.addEventListener('input', () => {
+      if (t) clearTimeout(t);
+      t = setTimeout(() => SETUP.filterRepoList(), 60);
+    });
+  }
+});
+
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (window.SETUP?.updateVolumeFill) SETUP.updateVolumeFill();
+});
+
 document.addEventListener("DOMContentLoaded", () => {
   try { SETUP.initWaveSurfer(); } catch (e) { console.error("WaveSurfer init error:", e); }
   const el = document.getElementById('quizSongsList');
@@ -182,7 +200,11 @@ SETUP.initWaveSurfer = function () {
   const volSlider = document.getElementById('wsVolume');
   if (volSlider) {
     wavesurfer.setVolume(volSlider.value);
-    volSlider.oninput = function () { wavesurfer.setVolume(this.value); };
+    SETUP.updateVolumeFill(); // inicijalno ispuni traku
+    volSlider.oninput = function () {
+      wavesurfer.setVolume(this.value);
+      SETUP.updateVolumeFill(); // ažuriraj ispunu
+    };
   }
   if (window.WaveSurfer?.Regions) {
     wsRegions = wavesurfer.registerPlugin(window.WaveSurfer.Regions.create());
@@ -207,6 +229,22 @@ SETUP.initWaveSurfer = function () {
   if (zin) zin.onclick = () => SETUP.zoomIn();
   if (zout) zout.onclick = () => SETUP.zoomOut();
   if (zreset) zreset.onclick = () => SETUP.zoomReset();
+};
+
+SETUP.updateVolumeFill = function () {
+  const el = document.getElementById('wsVolume');
+  if (!el) return;
+
+  const min = parseFloat(el.min || '0');
+  const max = parseFloat(el.max || '1');
+  const val = parseFloat(el.value || '0');
+  const pct = ((val - min) / (max - min)) * 100;
+
+  // boje: filled (zeleno) + rest (tamno)
+  const filled = '#28a745';
+  const rest = 'rgba(255,255,255,0.18)';
+
+  el.style.background = `linear-gradient(to right, ${filled} 0%, ${filled} ${pct}%, ${rest} ${pct}%, ${rest} 100%)`;
 };
 
 // Zoom helpers
@@ -290,6 +328,7 @@ SETUP.zoomOut = function() {
   const step = 10;
   const next = Math.max(0, (SETUP._zoomPx - step));
   SETUP.setZoomPx(next);
+  try { SETUP.queueRenderMarks(); } catch (e) { /* ignore */ }
 };
 
 SETUP.zoomReset = function() {
@@ -304,6 +343,7 @@ SETUP.zoomReset = function() {
   } catch (e) {
     SETUP.setZoomPx(0);
   }
+  try { SETUP.queueRenderMarks(); } catch (e) { /* ignore */ }
 };
 
 SETUP.zoomToRegion = function(region) {
@@ -426,8 +466,8 @@ SETUP.openEditor = function (id, filename, artist, title, start, dur) {
         resize: true
       });
       wavesurfer.setTime(st);
-      // render time marks (every 10s)
       try { SETUP.queueRenderMarks(); } catch (e) { /* ignore */ }
+      SETUP.updateVolumeFill();
     }
   });
 
@@ -599,9 +639,50 @@ SETUP.scanFolder = async function () {
     console.error(e);
     listContainer.innerHTML = '<div class="p-3 text-danger">Greška pri skeniranju.</div>';
   } finally {
+    try { SETUP.filterRepoList(); } catch (_) {}
     scanning = false;
   }
+  try { SETUP.filterRepoList(); } catch (_) {}
 };
+
+SETUP.filterRepoList = function () {
+  const q = (document.getElementById('repoSearch')?.value || '').trim().toLowerCase();
+  const list = document.getElementById('repoFileList');
+  if (!list) return;
+
+  const items = list.querySelectorAll('.list-group-item');
+  let shown = 0;
+
+  items.forEach(item => {
+    const hay = (item.innerText || item.textContent || '').toLowerCase();
+    const ok = !q || hay.includes(q);
+
+    // ključna promjena:
+    item.classList.toggle('d-none', !ok);
+
+    if (ok) shown++;
+  });
+
+  const info = document.getElementById('repoSearchInfo');
+  if (info) {
+    const total = items.length;
+    if (q) {
+      info.style.display = '';
+      info.textContent = `Prikazano: ${shown} / ${total}`;
+    } else {
+      info.style.display = 'none';
+      info.textContent = '';
+    }
+  }
+};
+
+
+SETUP.clearRepoSearch = function () {
+  const inp = document.getElementById('repoSearch');
+  if (inp) inp.value = '';
+  SETUP.filterRepoList();
+};
+
 
 SETUP.importSong = async function (ev, fullPath, filename, artist = "", title = "") {
   const btn = ev?.currentTarget || null;
