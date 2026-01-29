@@ -10,5 +10,5 @@ class Song(db.Model):
     title = db.Column(db.String(100), default="?")
     extra_data = db.Column(db.String(500), default="") 
     start_time = db.Column(db.Float, default=0.0)
-    duration = db.Column(db.Float, default=15.0)
+    duration = db.Column(db.Float, default=30.0)
     round_number = db.Column(db.Integer, default=1)

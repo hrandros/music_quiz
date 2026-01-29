@@ -9,70 +9,49 @@ window.LIVE = window.LIVE || {};
 
 // --- SOCKET LISTENERS ---
 socket.on('play_audio', (data) => {
-    // 1. Vizualno označavanje u tablici (skrivena tablica ili grading)
     document.querySelectorAll('.song-row').forEach(row => {
         row.classList.remove('table-active', 'border-warning', 'border-3');
     });
-  
     const row = document.getElementById('row-' + data.id);
     if (row) {
         row.classList.add('table-active', 'border-warning', 'border-3');
         row.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
-
-    // 2. Aktiviraj DJ konzolu (donja traka)
     const djConsole = document.getElementById('dj-console');
-    if (djConsole) {
-        djConsole.style.display = 'block'; 
-    }
-
-    // 3. Ažuriraj tekstove (Gornja kartica + Mini player)
+    if (djConsole) { djConsole.style.display = 'block'; }
     const counterStr = data.total_songs ? `${data.song_index} / ${data.total_songs}` : `${data.song_index}.`;
-    
     ['np-artist', 'np-artist-mini'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.innerHTML = `<span class="text-danger">${counterStr}</span> | ${data.artist || 'Nepoznato'}`;
     });
-
     ['np-title', 'np-title-mini'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.innerText = data.title || '---';
     });
-
-    // 4. Audio reprodukcija
     const audio = document.getElementById('audioPlayer');
     if (!audio) return;
-
-    // Resetiraj prethodni timer ako postoji
     if (typeof audioStopTimer !== 'undefined' && audioStopTimer) {
         clearTimeout(audioStopTimer);
     }
-
-    // VAŽNO: Prvo postavi listenere, onda SRC
     audio.onloadedmetadata = function () {
         audio.currentTime = data.start || 0;
         const volInput = document.getElementById('vol');
         if (volInput) audio.volume = volInput.value;
-        
         audio.play().then(() => {
-            // Postavi timer za gašenje nakon trajanja (npr. 15s)
             audioStopTimer = setTimeout(() => {
                 audio.pause();
                 console.log("Audio automatski zaustavljen.");
-            }, (data.duration || 15) * 1000);
+            }, (data.duration || 30) * 1000);
         }).catch(err => {
             console.warn("Autoplay blokiran. Klikni bilo gdje na stranicu pa probaj opet.", err);
         });
     };
-
-    // Tek sada učitavamo file
     audio.src = data.url;
 });
 
 // Liste igrača
 socket.on('admin_player_list_full', (players) => renderPlayerList(players));
 socket.on('admin_update_player_list', (players) => renderPlayerList(players));
-
 socket.on('admin_single_player_update', (d) => {
     const dot = document.getElementById(`status-dot-${d.name}`);
     if (dot) updateStatusDot(dot, d.status);
@@ -211,19 +190,6 @@ function generateScoreBtns(id, type, currentScore) {
     return html;
 }
 
-window.LIVE.setScore = function (btn, ansId, type, val) {
-    const group = btn.parentElement;
-    group.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    socket.emit('admin_update_score', { answer_id: ansId, type: type, value: val });
-};
-
-window.LIVE.finalizeRound = function () {
-    if (confirm("Završi ocjenjivanje i osvježi finalnu ljestvicu?")) {
-        socket.emit('admin_finalize_round', { round: currentRound });
-    }
-};
-
 function deletePlayer(name) {
     if (confirm(`Trajno obrisati tim "${name}" i sve njihove odgovore?`)) {
         socket.emit('admin_delete_player', { player_name: name });
@@ -271,3 +237,16 @@ async function adminSwitchQuiz(id) {
     const data = await res.json();
     if (data.status === 'ok') location.reload();
 }
+
+window.LIVE.setScore = function (btn, ansId, type, val) {
+    const group = btn.parentElement;
+    group.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    socket.emit('admin_update_score', { answer_id: ansId, type: type, value: val });
+};
+
+window.LIVE.finalizeRound = function () {
+    if (confirm("Završi ocjenjivanje i osvježi finalnu ljestvicu?")) {
+        socket.emit('admin_finalize_round', { round: currentRound });
+    }
+};

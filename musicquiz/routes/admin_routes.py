@@ -16,6 +16,7 @@ from extensions import db
 from musicquiz.models import Quiz, Song
 from musicquiz.services.quiz_service import get_active_quiz
 from musicquiz.services.deezer_service import query_deezer_metadata
+from config import Config
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -38,10 +39,8 @@ def login_required(f):
 # -------------------
 @admin_bp.route("/login", methods=["GET", "POST"])
 def login():
-    ADMIN_PASSWORD = "admin"   # premjestiti kasnije u .env
-
     if request.method == "POST":
-        if request.form.get("password") == ADMIN_PASSWORD:
+        if request.form.get("password") == Config.ADMIN_PASSWORD:
             session["logged_in"] = True
             return redirect(url_for("admin.admin_live"))
         flash("Kriva lozinka!", "danger")
@@ -103,7 +102,22 @@ def admin_setup():
 def create_quiz():
     Quiz.query.update({Quiz.is_active: False})
 
-    new_quiz = Quiz(title=request.json.get("title"), is_active=True)
+    title = request.json.get("title", "")
+    date_str = (request.json.get("date") or "").strip()
+
+    event_date = None
+    if date_str:
+        try:
+            from datetime import datetime
+            event_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except Exception:
+            return jsonify({"status": "error", "msg": "Neispravan format datuma (očekuje YYYY-MM-DD)."}), 400
+
+    if event_date is None:
+        new_quiz = Quiz(title=title, is_active=True)
+    else:
+        new_quiz = Quiz(title=title, event_date=event_date, is_active=True)
+
     db.session.add(new_quiz)
     db.session.commit()
 
@@ -208,7 +222,6 @@ def import_external_song():
 
         safe_name = secure_filename(pure_filename)
 
-        from config import Config
         destination = os.path.join(Config.SONGS_DIR, safe_name)
 
         shutil.copy2(source_path, destination)
@@ -219,7 +232,7 @@ def import_external_song():
             artist=artist,
             title=title,
             start_time=0.0,
-            duration=15.0,
+            duration=30.0,
             round_number=int(data.get("round", 1))
         )
 
@@ -261,7 +274,7 @@ def add_song_advanced():
         title=d.get("title"),
         extra_data=d.get("extra_data"),
         start_time=float(d.get("start_time", 0)),
-        duration=float(d.get("duration", 15)),
+        duration=float(d.get("duration", 30)),
         round_number=int(d.get("round", 1))
     )
 

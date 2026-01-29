@@ -42,8 +42,17 @@
       <select id="liveQuizSwitcher" class="form-select bg-black text-warning border-secondary fw-bold" onchange="adminSwitchQuiz(this.value)">
         {% if all_quizzes %}
           {% for q in all_quizzes %}
-            <option value="{{ q.id }}" {% if quiz and q.id == quiz.id %}selected{% endif %}>#{{ q.id }} {{ q.title }}</option>
+            {% if q.event_date %}
+              {% set date_display = q.event_date.strftime('%d.%m.%Y') %}
+            {% else %}
+              {% set date_display = '' %}
+            {% endif %}
+            <option value="{{ q.id }}" {% if q.id == quiz.id %}selected{% endif %}>
+              {{ date_display }} - {{ q.title }}
+            </option>
           {% endfor %}
+        {% else %}
+          <option value="0">Nema kvizova</option>
         {% endif %}
       </select>
     </div>

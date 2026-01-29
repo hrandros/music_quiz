@@ -4,7 +4,7 @@ import datetime
 class Quiz(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(100), nullable=False)
-    date_created = db.Column(
-        db.String(20),
-        default=datetime.date.today().strftime("%Y-%m-%d"))
+    # Use callable for default so it's evaluated at insert time
+    event_date = db.Column(db.Date, default=datetime.date.today)    
+    date_created = db.Column(db.DateTime, server_default=db.func.now())
     is_active = db.Column(db.Boolean, default=False)

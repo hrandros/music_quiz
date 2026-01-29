@@ -12,8 +12,8 @@ class Answer(db.Model):
     title_points = db.Column(db.Float, default=0.0)
     extra_points = db.Column(db.Float, default=0.0)
     is_locked = db.Column(db.Boolean, default=False)
-
-__table_args__ = (
+    timestamp = db.Column(db.DateTime, server_default=db.func.now())
+    __table_args__ = (
     db.UniqueConstraint("player_name", "song_id", name="uq_answer_player_song"),
     db.Index("ix_answer_round", "round_number"),
     db.Index("ix_answer_song", "song_id"),

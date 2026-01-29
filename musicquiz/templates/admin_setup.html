@@ -4,16 +4,19 @@
 
 {% block extra_head %}
 <!-- Ovdje trebaju JS libovi specifični za editor -->
-<script src="https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.min.js"></script>
-<script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js"></script>
+<script src="https://unpkg.com/wavesurfer.js@7/dist/wavesurfer.min.js" defer></script>
+<script src="https://unpkg.com/wavesurfer.js@7/dist/plugins/regions.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<!-- Flatpickr za lijepi lokalizirani datepicker -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/hr.js"></script>
 
 <style>
   .song-item:hover { background-color: #222 !important; cursor: pointer; }
   .editing-row { border: 2px solid var(--mq-primary) !important; background: #330000 !important; }
-  #waveform { background: #111; border: 1px solid #333; border-radius: 4px; }
-  .table-container { height: 450px; overflow-y: auto; background: #000; border: 1px solid #333; }
+
 </style>
 {% endblock %}
 
@@ -53,20 +56,18 @@
   <div class="d-flex align-items-center">
     <h2 class="text-white mb-0 me-3"><i class="bi bi-tools me-2" aria-hidden="true"></i>SETUP</h2>
 
-    <div class="input-group input-group-sm" style="width: 300px;">
+    <div class="input-group input-group-sm" style="width: 350px;">
       <span class="input-group-text bg-dark text-secondary border-secondary">AKTIVAN:</span>
       <select class="form-select bg-black text-warning border-secondary fw-bold" id="quizSwitcher" onchange="SETUP.switchQuiz(this.value)">
         {% if all_quizzes %}
           {% for q in all_quizzes %}
-            {% set date_display = q.date_created %}
-            {% if q.date_created %}
-              {% set parts = q.date_created.split('-') %}
-              {% if parts|length == 3 %}
-                {% set date_display = parts[2] ~ '.' ~ parts[1] ~ '.' ~ parts[0] %}
-              {% endif %}
+            {% if q.event_date %}
+              {% set date_display = q.event_date.strftime('%d.%m.%Y') %}
+            {% else %}
+              {% set date_display = '' %}
             {% endif %}
             <option value="{{ q.id }}" {% if q.id == quiz.id %}selected{% endif %}>
-              #{{ q.id }} {{ q.title }} ({{ date_display }})
+              {{ date_display }} - {{ q.title }}
             </option>
           {% endfor %}
         {% else %}
@@ -126,6 +127,36 @@
       </div>
     </div>
 
+        <!-- Modal: import song (enter artist/title) -->
+        <div class="modal fade" id="importSongModal" tabindex="-1">
+          <div class="modal-dialog">
+            <div class="modal-content bg-dark text-white border-secondary">
+              <div class="modal-header">
+                <h5 class="modal-title">Dodaj pjesmu u kviz</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Zatvori"></button>
+              </div>
+              <div class="modal-body">
+                <div class="mb-2">
+                  <label class="form-label small text-muted">Datoteka</label>
+                  <input type="text" id="importFilename" class="form-control bg-black text-white" readonly>
+                </div>
+                <div class="mb-2">
+                  <label class="form-label">Izvođač</label>
+                  <input type="text" id="importArtist" class="form-control bg-black text-white" placeholder="Izvođač">
+                </div>
+                <div class="mb-2">
+                  <label class="form-label">Naslov</label>
+                  <input type="text" id="importTitle" class="form-control bg-black text-white" placeholder="Naslov">
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Odustani</button>
+                <button type="button" class="btn btn-success" onclick="SETUP.confirmImport()">Dodaj</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
   </div>
 
   <!-- Desno: editor + pjesme u kvizu -->
@@ -155,13 +186,18 @@
 
         <div class="d-flex justify-content-between align-items-center">
           <div class="d-flex align-items-center">
-            <button class="btn btn-light btn-sm rounded-circle me-2" id="btnPlayPause" aria-label="Play/Pause">
-              <i class="bi bi-play-fill" aria-hidden="true"></i>
-            </button>
+            <div class="btn-group me-2" role="group" aria-label="Wave controls">
+              <button class="btn btn-light btn-sm rounded-circle" id="btnPlayPause" aria-label="Play/Pause">
+                <i class="bi bi-play-fill" aria-hidden="true"></i>
+              </button>
+              <button class="btn btn-outline-light btn-sm" id="btnZoomOut" title="Zumiraj manje">-</button>
+              <button class="btn btn-outline-light btn-sm" id="btnZoomIn" title="Zumiraj više">+</button>
+              <button class="btn btn-outline-light btn-sm" id="btnZoomReset" title="Resetiraj zum">⤢</button>
+            </div>
             <span id="lblCurrent" class="font-monospace text-info me-3 small">0.0s</span>
             <div class="border-start border-secondary ps-2 lh-1">
               <div class="small text-muted" style="font-size:0.7em">START: <span id="lblStart" class="text-white">0.0</span>s</div>
-              <div class="small text-muted" style="font-size:0.7em">TRAJANJE: <span id="lblDur" class="text-white">15.0</span>s</div>
+              <div class="small text-muted" style="font-size:0.7em">TRAJANJE: <span id="lblDur" class="text-white">30.0</span>s</div>
             </div>
           </div>
 
@@ -219,7 +255,7 @@
                               {{ (s.artist  or "")|tojson }},
                               {{ (s.title   or "")|tojson }},
                               {{ (s.start_time or 0.0) }},
-                              {{ (s.duration   or 15.0) }})'>
+                              {{ (s.duration   or 30.0) }})'>
                     <i class="bi bi-pencil-fill"></i>
                     </button>
                     <button class="btn btn-sm btn-outline-danger"
@@ -265,7 +301,7 @@
         <input type="text" id="newQuizTitle" class="form-control mb-3 bg-black text-white">
 
         <label for="newQuizDate" class="form-label">Datum:</label>
-        <input type="date" id="newQuizDate" class="form-control bg-black text-white">
+        <input type="text" id="newQuizDate" class="form-control bg-black text-white">
       </div>
       <div class="modal-footer">
         <button class="btn btn-warning w-100" onclick="SETUP.createNewQuiz()">KREIRAJ</button>
@@ -278,60 +314,4 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/admin_setup.js') }}"></script>
-<script>
-  // Fallback open modal in case data-bs attribute fails
-  function openNewQuizModal() {
-    //1) Zatvori editor (da nema overlay-a i tab-focus trapova)
-    if (window.SETUP?.closeEditor) SETUP.closeEditor();
-
-    // 2) Portaliziraj modal u <body> (izlaz iz .fade-in stacking konteksta)
-    const el = document.getElementById('newQuizModal');
-    if (el && el.parentNode !== document.body) {
-      document.body.appendChild(el);
-    }
-
-    // 3) Uvijek koristi istu instancu (bez duplog backdropa)
-    const modal = bootstrap.Modal.getOrCreateInstance(el); 
-    modal.show();
-  }
-
-  // Generiraj QR kodove za timove
-  function generateQR() {
-    const text = document.getElementById('teamsInput').value;
-    const cont = document.getElementById('qrPreview');
-    cont.innerHTML = "";
-    cont.classList.remove('d-none');
-
-    const ip = location.hostname + ":5000";
-
-    // Print CSS samo za QR
-    const style = document.createElement('style');
-    style.innerHTML = `@media print {
-      body * { visibility: hidden; }
-      #qrPreview, #qrPreview * { visibility: visible; }
-      #qrPreview { position: absolute; top:0; left:0; width:100%; display:block !important; }
-      .qr-card { display:inline-block; border:1px solid #000; padding:20px; margin:10px; text-align:center; width: 40%; page-break-inside: avoid; }
-    }`;
-    document.head.appendChild(style);
-
-    text.split('\n').forEach(line => {
-      if (line.trim()) {
-        const pin = Math.floor(1000 + Math.random() * 9000);
-        const url = `http://${ip}/player?name=${encodeURIComponent(line.trim())}&pin=${pin}`;
-
-        const div = document.createElement('div');
-        div.className = 'qr-card';
-        div.innerHTML = `<h2>${line}</h2><div id="qr-${pin}"></div><h3>PIN: ${pin}</h3>`;
-        cont.appendChild(div);
-
-        new QRCode(div.querySelector(`#qr-${pin}`), { text: url, width:128, height:128 });
-      }
-    });
-
-    setTimeout(() => window.print(), 500);
-  }
-
-  // Default datum na danas
-  try { document.getElementById('newQuizDate').valueAsDate = new Date(); } catch (e) { console.warn('No newQuizDate element yet'); }
-</script>
 {% endblock %}

@@ -218,3 +218,49 @@ h1, h2, h3, h4, h5, .navbar-brand, .btn, th {
 /* Ensure modals appear above custom overlays */
 .modal-backdrop { z-index: 19990 !important; }
 .modal { z-index: 20000 !important; }
+
+.table-container { 
+  height: 450px; 
+  overflow-y: auto; 
+  background: #000; 
+  border: 1px solid #333;}
+
+/* Waveform marks — zajednički stil (u main.css) */
+#waveform { 
+  background: #111; 
+  border: 1px solid #333; 
+  border-radius: 4px;
+  position: relative;}
+
+.ws-time-marks {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.ws-time-mark {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-left: 1px solid rgba(255,255,255,0.18);
+  pointer-events: none;
+}
+
+.ws-time-label {
+  position: absolute;
+  top: -18px;
+  left: 0;
+  transform: translateX(-50%);
+  min-width: 44px;
+  color: rgba(255,255,255,0.95);
+  font-size: 11px;
+  text-align: center;
+  pointer-events: none;
+  background: rgba(0,0,0,0.75);
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}

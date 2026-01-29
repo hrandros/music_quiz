@@ -2,7 +2,21 @@ const SETUP = {};
 let wavesurfer = null;
 let wsRegions = null;
 let currentEditingId = null;
+// pixels per second zoom level (0 = fit)
+SETUP._zoomPx = 0;
 
+document.addEventListener('DOMContentLoaded', function () {
+  if (typeof flatpickr !== 'undefined') {
+    flatpickr('#newQuizDate', {
+      altInput: true,
+      altFormat: 'd.m.Y',
+      dateFormat: 'Y-m-d',
+      defaultDate: 'today',
+      locale: 'hr',
+      allowInput: true
+    });
+  }
+});
 // --- HELPERS ---
 
 function escapeHtml(text) {
@@ -58,7 +72,7 @@ function addSongToTableHTML(s) {
     s.artist || '',
     s.title || '',
     s.start || 0,
-    s.duration || 15
+    s.duration || 30
   );
 
   const btnDel = createEl('button', 'btn btn-sm btn-outline-danger');
@@ -75,6 +89,48 @@ function addSongToTableHTML(s) {
   tr.appendChild(tdAct);
   tbody.appendChild(tr);
 }
+
+function openNewQuizModal() {
+    if (window.SETUP?.closeEditor) SETUP.closeEditor();
+    const el = document.getElementById('newQuizModal');
+    if (el && el.parentNode !== document.body) {
+      document.body.appendChild(el);
+    }
+    const modal = bootstrap.Modal.getOrCreateInstance(el); 
+    modal.show();
+  }
+
+// Generiraj QR kodove za timove
+function generateQR() {
+  const text = document.getElementById('teamsInput').value;
+  const cont = document.getElementById('qrPreview');
+  cont.innerHTML = "";
+  cont.classList.remove('d-none');
+  const ip = location.hostname + ":5000";
+  const style = document.createElement('style');
+  style.innerHTML = `@media print {
+    body * { visibility: hidden; }
+    #qrPreview, #qrPreview * { visibility: visible; }
+    #qrPreview { position: absolute; top:0; left:0; width:100%; display:block !important; }
+    .qr-card { display:inline-block; border:1px solid #000; padding:20px; margin:10px; text-align:center; width: 40%; page-break-inside: avoid; }
+  }`;
+  document.head.appendChild(style);
+  text.split('\n').forEach(line => {
+    if (line.trim()) {
+      const pin = Math.floor(1000 + Math.random() * 9000);
+      const url = `http://${ip}/player?name=${encodeURIComponent(line.trim())}&pin=${pin}`;
+      const div = document.createElement('div');
+      div.className = 'qr-card';
+      div.innerHTML = `<h2>${line}</h2><div id="qr-${pin}"></div><h3>PIN: ${pin}</h3>`;
+      cont.appendChild(div);
+      new QRCode(div.querySelector(`#qr-${pin}`), { text: url, width:128, height:128 });
+    }
+  });
+
+  setTimeout(() => window.print(), 500);
+}
+
+  // Datepicker initialized in template with flatpickr (keeps ISO value, shows dd.mm.YYYY)
 
 // --- INIT ---
 
@@ -160,9 +216,217 @@ SETUP.initWaveSurfer = function () {
       region.play();
     });
   }
-
+  try { SETUP.renderTimeMarks(); } catch (e) { /* ignore */ }
   const btn = document.getElementById('btnPlayPause');
   if (btn) btn.onclick = () => wavesurfer.playPause();
+  // Zoom buttons
+  const zin = document.getElementById('btnZoomIn');
+  const zout = document.getElementById('btnZoomOut');
+  const zreset = document.getElementById('btnZoomReset');
+  if (zin) zin.onclick = () => SETUP.zoomIn();
+  if (zout) zout.onclick = () => SETUP.zoomOut();
+  if (zreset) zreset.onclick = () => SETUP.zoomReset();
+};
+
+// Zoom helpers
+SETUP.setZoomPx = function(px) {
+  SETUP._zoomPx = Math.max(0, px || 0);
+  if (!wavesurfer) return;
+  try {
+    console.debug && console.debug('SETUP.setZoomPx', { requestedPx: px, effectivePx: SETUP._zoomPx, hasZoom: typeof(wavesurfer.zoom) === 'function' });
+    if (typeof wavesurfer.zoom === 'function') {
+      // wavesurfer.zoom expects pixels per second (v7)
+      wavesurfer.zoom(SETUP._zoomPx);
+      // After zoom, center view around selected region (if any) or current time
+      try {
+        const dur = wavesurfer.getDuration() || 0;
+        if (dur > 0) {
+          let centerTime = dur / 2;
+          // If there's an active region, center on its midpoint
+          // Prefer selected region, then stored song region
+          let r = null;
+          if (wsRegions) {
+            const regions = Object.values(wsRegions.list || {});
+            r = regions.find(rr => rr.selected) || regions[0];
+          }
+          if (r) {
+            centerTime = (r.start + r.end) / 2;
+          } else if (SETUP._currentSongRegion && SETUP._currentSongRegion.duration > 0) {
+            centerTime = (SETUP._currentSongRegion.start + SETUP._currentSongRegion.duration) / 2;
+          }
+          // If no region, use currentTime if available
+          try { const ct = wavesurfer.getCurrentTime(); if (ct) centerTime = ct; } catch (e) {}
+
+          // Seek to center ratio; seekTo will also adjust scroll/viewport
+          const ratio = Math.max(0, Math.min(1, centerTime / dur));
+          // preserve paused state
+          const wasPlaying = !wavesurfer.paused;
+          wavesurfer.pause();
+          wavesurfer.seekTo(ratio);
+
+          // Best-effort center: compute total pixel width and scroll so centerTime is centered
+          setTimeout(() => {
+            try {
+              const container = document.getElementById('waveform');
+              const renderer = wavesurfer.drawer || wavesurfer.renderer || {};
+              const wrapper = renderer && (renderer.wrapper || renderer.container || renderer.element);
+              const totalWidth = wrapper ? (wrapper.scrollWidth || wrapper.offsetWidth) : (container ? container.clientWidth : 0);
+              const centerPx = (ratio) * totalWidth;
+              const visibleW = container ? container.clientWidth : 800;
+              if (wrapper) wrapper.scrollLeft = Math.max(0, Math.floor(centerPx - visibleW / 2));
+              // try to call renderer recenter if available
+              try { if (typeof renderer.recenter === 'function') renderer.recenter(); } catch(e) {}
+              // render time marks after zoom/resize
+              try { SETUP.queueRenderMarks(); } catch (e) { /* ignore */ }
+            } catch (e) { /* ignore */ }
+          }, 50);
+        }
+      } catch (e) {
+        console.warn('Center after zoom failed', e);
+      }
+    } else if (typeof wavesurfer.params !== 'undefined' && wavesurfer.params.partialRender) {
+      // no-op fallback: try to redraw
+      wavesurfer.drawer && wavesurfer.drawer.recenter && wavesurfer.drawer.recenter();
+    } else {
+      console.warn('WaveSurfer.zoom not available in this build');
+    }
+  } catch (e) {
+    console.warn('Zoom error', e);
+  }
+};
+
+SETUP.zoomIn = function() {
+  console.debug && console.debug('SETUP.zoomIn called', { currentPx: SETUP._zoomPx });
+  // If a region is selected, zoom to that region so it fills the viewport
+  if (wsRegions) {
+    const regions = Object.values(wsRegions.list || {});
+    const sel = regions.find(r => r.selected) || regions[0];
+    if (sel) {
+      return SETUP.zoomToRegion(sel);
+    }
+  }
+  // If no interactive region, but we have song clip info, zoom to that clip
+  if (SETUP._currentSongRegion && SETUP._currentSongRegion.duration > 0) {
+    return SETUP.zoomToClip(SETUP._currentSongRegion.start, SETUP._currentSongRegion.duration);
+  }
+  // Fallback incremental zoom
+  const step = 40;
+  const next = SETUP._zoomPx === 0 ? 40 : SETUP._zoomPx + step;
+  SETUP.setZoomPx(next);
+};
+
+SETUP.zoomOut = function() {
+  const step = 10;
+  const next = Math.max(0, (SETUP._zoomPx - step));
+  SETUP.setZoomPx(next);
+};
+
+SETUP.zoomReset = function() {
+  // Reset to fit entire waveform
+  if (!wavesurfer) return SETUP.setZoomPx(0);
+  try {
+    const dur = wavesurfer.getDuration() || 1;
+    const container = document.getElementById('waveform');
+    const width = container ? container.clientWidth : (wavesurfer.drawer && wavesurfer.drawer.wrapper ? wavesurfer.drawer.wrapper.clientWidth : 800);
+    const defaultPx = Math.max(0, Math.floor(width / dur));
+    SETUP.setZoomPx(defaultPx);
+    // center on middle
+    wavesurfer.seekTo(0.5);
+  } catch (e) {
+    SETUP.setZoomPx(0);
+  }
+};
+
+SETUP.zoomToRegion = function(region) {
+  console.debug && console.debug('SETUP.zoomToRegion', { start: region?.start, end: region?.end });
+  if (!wavesurfer || !region) return;
+  try {
+    const dur = wavesurfer.getDuration() || 1;
+    const clipDur = Math.max(0.001, (region.end - region.start));
+    const container = document.getElementById('waveform');
+    const width = container ? container.clientWidth : (wavesurfer.drawer && wavesurfer.drawer.wrapper ? wavesurfer.drawer.wrapper.clientWidth : 800);
+
+    // add padding (10s each side) but clamp to song bounds
+    const pad = 10; // seconds of padding on each side
+    const paddedStart = Math.max(0, region.start - pad);
+    const paddedEnd = Math.min(dur, region.end + pad);
+    const paddedDur = Math.max(0.001, (paddedEnd - paddedStart));
+    // pixels per second so that padded clip fills the container: width / paddedDur
+    let pxPerSec = width / paddedDur;
+    // cap px/sec to avoid extreme zoom values
+    const MAX_PX_PER_SEC = 3000;
+    pxPerSec = Math.min(pxPerSec, MAX_PX_PER_SEC);
+    console.debug && console.debug('SETUP.zoomToRegion pxPerSec', { width, paddedDur, pxPerSec, MAX_PX_PER_SEC });
+    if (typeof wavesurfer.zoom === 'function') {
+      wavesurfer.zoom(pxPerSec);
+    }
+    const centerTime = (paddedStart + paddedEnd) / 2;
+    const ratio = Math.max(0, Math.min(1, centerTime / dur));
+    // Seek to center without resuming playback
+    const wasPlaying = !wavesurfer.paused;
+    wavesurfer.pause();
+    wavesurfer.seekTo(ratio);
+    if (wasPlaying) { /* keep paused to avoid autoplay */ }
+    // store current zoom px
+    SETUP._zoomPx = pxPerSec;
+    // adjust scroll to center region visually
+    setTimeout(() => {
+      try {
+        const renderer = wavesurfer.drawer || wavesurfer.renderer || {};
+        const wrapper = renderer && (renderer.wrapper || renderer.container || renderer.element);
+        const container = document.getElementById('waveform');
+        const totalWidth = wrapper ? (wrapper.scrollWidth || wrapper.offsetWidth) : (container ? container.clientWidth : 0);
+        const centerPx = Math.max(0, Math.min(totalWidth, (ratio) * totalWidth));
+        const visibleW = container ? container.clientWidth : 800;
+        if (wrapper) wrapper.scrollLeft = Math.max(0, Math.floor(centerPx - visibleW / 2));
+        try { if (typeof renderer.recenter === 'function') renderer.recenter(); } catch(e) {}
+        // refresh marks after scrolling/zoom
+        try { SETUP.queueRenderMarks(); } catch (e) {}
+      } catch (e) {}
+    }, 50);
+  } catch (e) {
+    console.warn('zoomToRegion failed', e);
+  }
+};
+
+SETUP.zoomToClip = function(start, clipDur) {
+  if (!wavesurfer) return;
+  try {
+    const dur = wavesurfer.getDuration() || 1;
+    const container = document.getElementById('waveform');
+    const width = container ? container.clientWidth : (wavesurfer.drawer && wavesurfer.drawer.wrapper ? wavesurfer.drawer.wrapper.clientWidth : 800);
+    // add padding (10s each side) but clamp to song bounds
+    const pad = 10;
+    const paddedStart = Math.max(0, start - pad);
+    const paddedEnd = Math.min(dur, start + (clipDur || 0) + pad);
+    const paddedDur = Math.max(0.001, (paddedEnd - paddedStart));
+    let pxPerSec = width / paddedDur;
+    const MAX_PX_PER_SEC = 3000;
+    pxPerSec = Math.min(pxPerSec, MAX_PX_PER_SEC);
+    console.debug && console.debug('SETUP.zoomToClip pxPerSec', { width, paddedDur, pxPerSec, MAX_PX_PER_SEC });
+    if (typeof wavesurfer.zoom === 'function') wavesurfer.zoom(pxPerSec);
+
+    const centerTime = paddedStart + paddedDur / 2;
+    const ratio = Math.max(0, Math.min(1, centerTime / dur));
+    const wasPlaying = !wavesurfer.paused;
+    wavesurfer.pause();
+    wavesurfer.seekTo(ratio);
+    if (wasPlaying) { }
+    SETUP._zoomPx = pxPerSec;
+    setTimeout(() => {
+      try {
+        const renderer = wavesurfer.drawer || wavesurfer.renderer || {};
+        const wrapper = renderer && (renderer.wrapper || renderer.container || renderer.element);
+        const totalWidth = wrapper ? (wrapper.scrollWidth || wrapper.offsetWidth) : (container ? container.clientWidth : 0);
+        const centerPx = Math.max(0, Math.min(totalWidth, ratio * totalWidth));
+        const visibleW = container ? container.clientWidth : 800;
+        if (wrapper) wrapper.scrollLeft = Math.max(0, Math.floor(centerPx - visibleW / 2));
+        try { if (typeof renderer.recenter === 'function') renderer.recenter(); } catch(e) {}
+        // refresh marks after scrolling/zoom
+        try { SETUP.queueRenderMarks(); } catch (e) {}
+      } catch (e) {}
+    }, 50);
+  } catch (e) { console.warn('zoomToClip failed', e); }
 };
 
 // --- EDITOR ---
@@ -189,12 +453,15 @@ SETUP.openEditor = function (id, filename, artist, title, start, dur) {
 
   wavesurfer.load('/stream_song/' + filename);
 
+  // store current song clip info for zoom defaults
+  SETUP._currentSongRegion = { start: parseFloat(start || 0), duration: parseFloat(dur || 30) };
+
   // osiguraj da 'ready' handler postoji samo jednom
   wavesurfer.once('ready', () => {
     if (wsRegions) {
       wsRegions.clearRegions();
       const st = parseFloat(start || 0);
-      const du = parseFloat(dur || 15);
+      const du = parseFloat(dur || 30);
       wsRegions.addRegion({
         start: st,
         end: st + du,
@@ -203,8 +470,19 @@ SETUP.openEditor = function (id, filename, artist, title, start, dur) {
         resize: true
       });
       wavesurfer.setTime(st);
+      // render time marks (every 10s)
+      try { SETUP.queueRenderMarks(); } catch (e) { /* ignore */ }
     }
   });
+
+  // keep _currentSongRegion in sync if user edits regions
+  if (wsRegions) {
+    wsRegions.on && wsRegions.on('region-updated', (region) => {
+      try {
+        SETUP._currentSongRegion = { start: parseFloat(region.start || 0), duration: parseFloat((region.end - region.start) || 0) };
+      } catch (e) {}
+    });
+  }
 
   wavesurfer.once('error', (e) => {
     console.error("WaveSurfer error:", e);
@@ -225,7 +503,7 @@ SETUP.saveChanges = async function () {
   const artist = document.getElementById('editArtist').value;
   const title = document.getElementById('editTitle').value;
 
-  let start = 0, duration = 15;
+  let start = 0, duration = 30;
   if (wsRegions) {
     const regions = wsRegions.getRegions();
     if (regions.length > 0) {
@@ -272,11 +550,12 @@ SETUP.removeSong = async function (id) {
 
 SETUP.createNewQuiz = async function () {
   const t = document.getElementById('newQuizTitle').value;
+  const d = document.getElementById('newQuizDate').value;
   if (!t) return alert("Upiši naziv!");
   await fetch("/admin/create_quiz", {
     method: "POST",
     headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({ title: t })
+    body: JSON.stringify({ title: t, date: d })
   });
   location.reload();
 };
@@ -347,7 +626,7 @@ SETUP.scanFolder = async function () {
       const btns = createEl('div', 'btn-group btn-group-sm');
       const btnAdd = createEl('button', 'btn btn-success', '+');
       btnAdd.title = 'Dodaj u kviz';
-      btnAdd.onclick = (ev) => SETUP.importSong(ev, fullPath, fileNameWithExt);
+      btnAdd.onclick = (ev) => SETUP.showImportModal(ev, fullPath, fileNameWithExt);
 
       const btnMeta = createEl('button', 'btn btn-outline-info', 'Meta');
       btnMeta.title = 'Pokušaj dohvatiti izvođača/naslov (Deezer)';
@@ -476,3 +755,183 @@ SETUP.magicCheck = async function (ev, fullPath, filename) {
     }
   }
 };
+
+// Show modal to enter artist/title before importing
+SETUP.showImportModal = function (ev, fullPath, filename) {
+  SETUP._pendingImport = { ev, fullPath, filename };
+  const modalEl = document.getElementById('importSongModal');
+  if (!modalEl) {
+    // fallback: call import directly
+    return SETUP.importSong(ev, fullPath, filename);
+  }
+  const fnInput = document.getElementById('importFilename');
+  const artistInput = document.getElementById('importArtist');
+  const titleInput = document.getElementById('importTitle');
+  if (fnInput) fnInput.value = filename;
+  if (artistInput) artistInput.value = '';
+  if (titleInput) titleInput.value = filename.replace(/\.mp3$/i, '').replace(/[_\-]/g, ' ');
+
+  const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+  modal.show();
+};
+
+SETUP.confirmImport = async function () {
+  const pending = SETUP._pendingImport;
+  if (!pending) return;
+  const artist = (document.getElementById('importArtist')?.value || '').trim();
+  const title = (document.getElementById('importTitle')?.value || '').trim();
+  const modalEl = document.getElementById('importSongModal');
+  const modal = modalEl ? bootstrap.Modal.getOrCreateInstance(modalEl) : null;
+  try {
+    await SETUP.importSong(pending.ev, pending.fullPath, pending.filename, artist, title);
+  } finally {
+    SETUP._pendingImport = null;
+    if (modal) modal.hide();
+  }
+};
+
+// --- HELPERI ZA WAVESURFER DOM I PX/SEC ---
+
+SETUP._getWaveElements = function () {
+  const container = document.getElementById('waveform');
+  let renderer = null, wrapper = null;
+
+  if (wavesurfer) {
+    // v7 renderer
+    if (wavesurfer.renderer) {
+      renderer = wavesurfer.renderer;
+      try {
+        if (typeof renderer.getWrapper === 'function') {
+          wrapper = renderer.getWrapper();
+        } else if (renderer.elements && renderer.elements.wrapper) {
+          wrapper = renderer.elements.wrapper;
+        } else if (renderer.wrapper || renderer.container || renderer.element) {
+          wrapper = renderer.wrapper || renderer.container || renderer.element;
+        }
+      } catch (_) {}
+    }
+    // stariji v5/v6 drawer fallback
+    if (!wrapper && wavesurfer.drawer) {
+      renderer = wavesurfer.drawer;
+      wrapper = wavesurfer.drawer.wrapper || wavesurfer.drawer.container || null;
+    }
+  }
+  return { container, renderer, wrapper };
+};
+
+SETUP._getPxPerSec = function (dur) {
+  const { container } = SETUP._getWaveElements();
+  // Ako je postavljen zoomPx, koristi njega; inače „fit to width“
+  if (SETUP._zoomPx && SETUP._zoomPx > 0) return SETUP._zoomPx;
+  const cw = container ? container.clientWidth : 0;
+  return dur > 0 && cw > 0 ? cw / dur : 0;
+};
+
+// Debounce preko RAF-a da se markeri crtaju tek kad DOM završi reflow
+SETUP.queueRenderMarks = function () {
+  if (SETUP._marksRaf) cancelAnimationFrame(SETUP._marksRaf);
+  SETUP._marksRaf = requestAnimationFrame(() => {
+    try { SETUP.renderTimeMarks(); } catch (e) {}
+  });
+};
+
+// Draw time markers (every 10s) inside WaveSurfer wrapper
+// Zamijeni postojeću implementaciju ovime:
+SETUP.renderTimeMarks = function () {
+  if (!wavesurfer) return;
+  try {
+    const dur = wavesurfer.getDuration() || 0;
+    if (dur <= 0) return;
+
+    const { container, wrapper } = SETUP._getWaveElements();
+    const host = (wrapper || container);
+    if (!host) return;
+
+    const hostPos = window.getComputedStyle(host).position;
+    if (!hostPos || hostPos === 'static') host.style.position = 'relative';
+
+    // Osiguraj kontejner za markere
+    let marksContainer = host.querySelector('.ws-time-marks');
+    if (!marksContainer) {
+      marksContainer = document.createElement('div');
+      marksContainer.className = 'ws-time-marks';
+      host.appendChild(marksContainer);
+    }
+
+    // Izračun pouzdane širine vremenske osi
+    const pxPerSec = SETUP._getPxPerSec(dur);
+    // totalWidth barem koliko je vidljiva širina kontejnera (za "fit to width")
+    const visibleW = container ? container.clientWidth : (host.clientWidth || 0);
+    const computedWidth = Math.max(visibleW, Math.floor(dur * pxPerSec));
+    marksContainer.style.width = computedWidth + 'px';
+
+    // Priprema vidljivog prozora za odlučivanje o labelama
+    const visibleLeft = wrapper ? wrapper.scrollLeft : (container ? container.scrollLeft : 0);
+
+    // Očisti prethodne markere
+    marksContainer.innerHTML = '';
+
+    const step = 10; // svake 10s
+    const minLabelPx = 60;
+    let lastLabelPx = -Infinity;
+
+    for (let t = 0; t <= Math.ceil(dur); t += step) {
+      const leftPx = Math.floor(t * pxPerSec);
+      const mark = document.createElement('div');
+      mark.className = 'ws-time-mark';
+      mark.style.position = 'absolute';
+      mark.style.left = leftPx + 'px';
+      mark.style.top = '0';
+      mark.style.height = '100%';
+      mark.style.borderLeft = '1px solid rgba(255,255,255,0.18)';
+      mark.style.pointerEvents = 'none';
+      marksContainer.appendChild(mark);
+
+      // Labelu renderiraj samo kad ima mjesta i kad je u vidljivom području (+/-20px margina)
+      if (
+        leftPx >= (visibleLeft - 20) &&
+        leftPx <= (visibleLeft + visibleW + 20) &&
+        Math.abs(leftPx - lastLabelPx) >= minLabelPx
+      ) {
+        const lbl = document.createElement('div');
+        lbl.className = 'ws-time-label';
+        lbl.style.position = 'absolute';
+        lbl.style.top = '0';
+        lbl.style.left = '0';
+        lbl.style.transform = 'translateX(-50%)';
+        lbl.style.minWidth = '44px';
+        lbl.style.color = 'rgba(255,255,255,0.95)';
+        lbl.style.fontSize = '11px';
+        lbl.style.textAlign = 'center';
+        lbl.style.pointerEvents = 'none';
+        //lbl.style.background = 'rgba(0,0,0,0.75)';
+        //lbl.style.padding = '2px 6px';
+        //lbl.style.borderRadius = '4px';
+        lbl.style.whiteSpace = 'nowrap';
+        const mm = Math.floor(t / 60).toString().padStart(2, '0');
+        const ss = Math.floor(t % 60).toString().padStart(2, '0');
+        lbl.textContent = `${mm}:${ss}`;
+        mark.appendChild(lbl);
+        lastLabelPx = leftPx;
+      }
+    }
+
+    // Scroll listener (jednom) da labelice prate pomak
+    if (wrapper && !marksContainer._hasScrollListener) {
+      marksContainer._hasScrollListener = true;
+      wrapper.addEventListener('scroll', function () {
+        if (marksContainer._scrollTimer) clearTimeout(marksContainer._scrollTimer);
+        marksContainer._scrollTimer = setTimeout(() => {
+          try { SETUP.renderTimeMarks(); } catch (e) {}
+        }, 50);
+      });
+    }
+  } catch (e) {
+    console.warn('renderTimeMarks failed', e);
+  }
+};
+
+// update marks on window resize so positions stay correct
+window.addEventListener('resize', function () {
+  try { SETUP.queueRenderMarks(); } catch (e) {}
+});
