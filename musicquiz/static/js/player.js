@@ -3,7 +3,7 @@ const socket = io();
 // --- GLOBALNE VARIJABLE ---
 let myName = "";
 let currentSongId = null;
-let saveTimeout = null; // Timer za automatsko spremanje
+let saveTimeout = null;
 
 // --- INICIJALIZACIJA (QR KOD LOGIN) ---
 document.addEventListener("DOMContentLoaded", () => {
@@ -30,7 +30,7 @@ function joinGame() {
         err.innerText = "Unesi ime tima!";
         return;
     }
-
+    socket.emit('update_leaderboard');
     socket.emit('player_join', { name: n, pin: p });
 }
 

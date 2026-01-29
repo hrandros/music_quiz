@@ -48,6 +48,10 @@
   #qrcode img {
     margin: 0 auto;
   }
+
+  #timerRing {
+    transition: stroke-dashoffset 1s linear, stroke 0.5s ease;
+  }
 </style>
 {% endblock %}
 
@@ -82,9 +86,27 @@
           <h1 id="songDisplay" class="display-1 fw-bold text-white mb-2" style="font-family: 'Oswald';">ČEKAM...</h1>
           <h3 id="statusLabel" class="text-muted text-uppercase tracking-widest">PRIPREMA</h3>
 
-          <div id="correct-answer-display" class="d-none mt-4"></div>
+          <div id="correct-answer-display" class="d-none mt-4 animate__animated animate__fadeIn">
+              <h4 class="text-danger mb-1">TOČAN ODGOVOR:</h4>
+              <h2 id="ansKey" class="text-white fw-bold"></h2>
+          </div>
+
           <div id="timerWrapper" class="d-none mt-5">
-              </div>
+            <svg width="150" height="150" viewBox="0 0 120 120" class="mx-auto d-block">
+                <circle cx="60" cy="60" r="54" fill="none" stroke="#333" stroke-width="8" />
+                
+                <circle id="timerRing" cx="60" cy="60" r="54" fill="none" stroke="#dc3545" stroke-width="8" 
+                        stroke-dasharray="339.29" stroke-dashoffset="0" stroke-linecap="round" 
+                        transform="rotate(-90 60 60)" 
+                        style="transition: stroke-dashoffset 1s linear, stroke 0.3s ease;" />
+                
+                <text id="timerVal" x="60" y="72" text-anchor="middle" fill="white" 
+                      font-size="35" font-weight="bold" style="font-family: 'Oswald'; shadow: 2px 2px 4px rgba(0,0,0,0.5);">
+                    0
+                </text>
+            </svg>
+            <p class="text-muted mt-2 small text-uppercase fw-bold" style="letter-spacing: 2px;">Preostalo vrijeme</p>
+        </div>
       </div>
 
     </div>
@@ -95,7 +117,7 @@
           <i class="bi bi-trophy-fill text-warning me-2"></i> POREDAK
         </h2>
 
-        <div id="lbContent" class="flex-grow-1 overflow-hidden mt-2 animate__animated animate__fadeIn">
+        <div id="leaderboard-body" class="flex-grow-1 overflow-hidden mt-2 animate__animated animate__fadeIn">
             </div>
       </div>
     </div>

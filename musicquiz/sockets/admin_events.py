@@ -9,7 +9,8 @@ import time
 
 # Globalno stanje kviza
 quiz_settings = {
-    "registrations_open": False
+    "registrations_open": False,
+    "quiz_paused": False
 }
 
 # --- POMOĆNE FUNKCIJE ---
@@ -35,6 +36,29 @@ def calculate_and_broadcast_leaderboard():
     db.session.commit()
     socketio.emit("update_leaderboard", leaderboard)
     return leaderboard
+
+def broadcast_grading_data():
+    """Prikuplja sve odgovore za trenutno aktivnu pjesmu i šalje ih adminu."""
+    quiz = get_active_quiz()
+    active_songs = Song.query.filter_by(quiz_id=quiz.id).all()
+    song_ids = [s.id for s in active_songs]
+    
+    answers = Answer.query.filter(Answer.song_id.in_(song_ids)).all()
+    
+    grading_payload = []
+    for ans in answers:
+        grading_payload.append({
+            "id": ans.id,
+            "player_name": ans.player_name,
+            "artist_guess": ans.artist_guess,
+            "title_guess": ans.title_guess,
+            "artist_points": float(ans.artist_points),
+            "title_points": float(ans.title_points),
+            "song_id": ans.song_id
+        })
+    
+    # Šaljemo samo adminima
+    socketio.emit("admin_receive_grading_data", grading_payload)
 
 def finalize_round(round_num):
     """Završni auto-grade za cijelu rundu i finalno slanje ljestvice."""
@@ -77,19 +101,29 @@ def auto_quiz_sequence(song_id, round_num, app):
             "song_index": idx,
             "total_songs": total_songs,
             "artist": song.artist,
-            "title": song.title
+            "title": song.title,
+            "round": round_num
         })
         socketio.emit("player_unlock_input", {"song_id": song.id, "song_index": idx, "round": round_num})
         socketio.emit("tv_start_timer", {"seconds": song.duration, "round": round_num})
 
-        time.sleep(song.duration)
+        # DINAMIČKO ČEKANJE (PJESMA)
+        elapsed = 0
+        while elapsed < song.duration:
+            if not quiz_settings["quiz_paused"]:
+                time.sleep(1)
+                elapsed += 1
+            else:
+                time.sleep(0.5) # Provjeravaj češće je li pauza gotova
 
         # 2. ZAKLJUČAJ I PRIKAŽI TOČAN ODGOVOR
         socketio.emit("player_lock_input")
         socketio.emit("round_locked", {"round": round_num})
         socketio.emit("screen_show_correct", {
+            "id": song.id,
             "artist": song.artist,
             "title": song.title,
+            "round": round_num,
             "duration": 15
         })
         
@@ -102,8 +136,16 @@ def auto_quiz_sequence(song_id, round_num, app):
         
         # Osvježi ljestvicu uživo nakon svake pjesme
         calculate_and_broadcast_leaderboard()
+        broadcast_grading_data()
 
-        time.sleep(15)
+        # DINAMIČKO ČEKANJE (PJESMA)
+        elapsed = 0
+        while elapsed < song.duration:
+            if not quiz_settings["quiz_paused"]:
+                time.sleep(1)
+                elapsed += 1
+            else:
+                time.sleep(0.5)
 
         # 4. SLJEDEĆA PJESMA ILI KRAJ RUNDE
         next_song = Song.query.filter(
@@ -138,6 +180,12 @@ def register_admin_events(socketio):
         emit("player_unlock_input", payload, broadcast=True)
         emit("tv_start_timer", {"seconds": s.duration, "round": s.round_number}, broadcast=True)
 
+    @socketio.on("admin_toggle_pause")
+    def handle_toggle_pause(data):
+        quiz_settings["quiz_paused"] = data.get("paused", False)
+        # Obavijesti sve (Admina, TV, Igrače) da je kviz pauziran/nastavljen
+        socketio.emit("quiz_pause_state", {"paused": quiz_settings["quiz_paused"]})
+
     @socketio.on("admin_finalize_round")
     def handle_manual_finalize(data):
         round_num = data.get("round")
@@ -148,6 +196,10 @@ def register_admin_events(socketio):
         answers_data = [{"artist": s.artist, "title": s.title} for s in songs]
         emit("screen_show_answers", {"answers": answers_data, "duration": 15}, broadcast=True)
 
+    @socketio.on("admin_get_grading_data")
+    def handle_get_grading():
+        broadcast_grading_data()
+
     @socketio.on("admin_update_score")
     def handle_score_update(data):
         ans = Answer.query.get(data["answer_id"])
@@ -157,6 +209,7 @@ def register_admin_events(socketio):
             db.session.commit()
             # Nakon ručne promjene bodova, odmah osvježi TV
             calculate_and_broadcast_leaderboard()
+            broadcast_grading_data()
 
     @socketio.on("admin_delete_player")
     def handle_delete_player(data):
