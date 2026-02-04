@@ -40,12 +40,24 @@ document.addEventListener("DOMContentLoaded", () => {
   const el = document.getElementById('quizSongsList');
   if (el && typeof Sortable !== 'undefined') {
     Sortable.create(el, {
-      animation: 150,
-      handle: '.q-row',
-      onEnd: function (evt) {
+    animation: 150,
+    handle: '.q-row',
+    onEnd: async function () {
+      const ids = Array.from(el.querySelectorAll('tr.q-row'))
+        .map(tr => parseInt(tr.id.replace('qrow-', ''), 10))
+        .filter(n => !isNaN(n));
+
+      try {
+        await fetch("/admin/reorder_songs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids })
+        });
+      } catch (e) {
+        console.error("Reorder failed", e);
       }
-    });
-  }
+    }
+  });}
   const savedPath = localStorage.getItem('rockQuiz_lastPath');
   if (savedPath) {
     const input = document.getElementById('localFolderPath');
@@ -623,12 +635,7 @@ SETUP.scanFolder = async function () {
       btnAdd.title = 'Dodaj u kviz';
       btnAdd.onclick = (ev) => SETUP.showImportModal(ev, fullPath, fileNameWithExt);
 
-      const btnMeta = createEl('button', 'btn btn-outline-info', 'Meta');
-      btnMeta.title = 'Pokušaj dohvatiti izvođača/naslov (Deezer)';
-      btnMeta.onclick = (ev) => SETUP.magicCheck(ev, fullPath, fileNameWithExt);
-
       btns.appendChild(btnAdd);
-      btns.appendChild(btnMeta);
 
       row.appendChild(left);
       row.appendChild(btns);
@@ -760,52 +767,49 @@ SETUP.openPicker = async function (ev) {
   }
 };
 
-SETUP.magicCheck = async function (ev, fullPath, filename) {
-  const btn = ev?.currentTarget;
-  const oldHtml = btn ? btn.innerHTML : '';
-  if (btn) {
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-    btn.disabled = true;
-  }
-  try {
-    const res = await fetch("/admin/api_check_deezer", {
-      method: "POST",
-      headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({ filename: filename })
-    });
-    const data = await res.json();
-    if (data.status === "ok" && data.found) {
-      if (confirm(`Pronađeno:\n\nIzvođač: ${data.artist}\nNaslov: ${data.title}\n\nUvesti s ovim podacima?`)) {
-        await SETUP.importSong(ev, fullPath, filename, data.artist, data.title);
-      }
-    } else {
-      alert("Deezer nije pronašao podatke za: " + filename);
-    }
-  } catch (e) {
-    console.error(e);
-    alert("Greška u komunikaciji s Deezerom.");
-  } finally {
-    if (btn) {
-      btn.innerHTML = oldHtml;
-      btn.disabled = false;
-    }
-  }
+SETUP.lookupDeezerByFilename = async function(filename) {
+  const res = await fetch("/admin/api_check_deezer", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ filename })
+  });
+  return await res.json();
 };
 
 // Show modal to enter artist/title before importing
-SETUP.showImportModal = function (ev, fullPath, filename) {
+SETUP.showImportModal = async function (ev, fullPath, filename) {
   SETUP._pendingImport = { ev, fullPath, filename };
+
   const modalEl = document.getElementById('importSongModal');
-  if (!modalEl) {
-    // fallback: call import directly
-    return SETUP.importSong(ev, fullPath, filename);
-  }
-  const fnInput = document.getElementById('importFilename');
-  const artistInput = document.getElementById('importArtist');
-  const titleInput = document.getElementById('importTitle');
+  if (!modalEl) return SETUP.importSong(ev, fullPath, filename);
+
+  const fnInput  = document.getElementById('importFilename');
+  const artistEl = document.getElementById('importArtist');
+  const titleEl  = document.getElementById('importTitle');
+
   if (fnInput) fnInput.value = filename;
-  if (artistInput) artistInput.value = '';
-  if (titleInput) titleInput.value = filename.replace(/\.mp3$/i, '').replace(/[_\-]/g, ' ');
+
+  // reset polja svaki put (da ne ostane stari rezultat)
+  if (artistEl) artistEl.value = "";
+  if (titleEl)  titleEl.value  = "";
+
+  const fallbackTitle = filename
+    .replace(/\.mp3$/i, '')
+    .replace(/[_\-]/g, ' ')
+    .trim();
+
+  let data = null;
+  try {
+    data = await SETUP.lookupDeezerByFilename(filename);
+  } catch (e) {
+    console.error(e);
+    data = null;
+  }
+
+  const found = data && data.status === "ok" && data.found;
+
+  if (artistEl) artistEl.value = found ? (data.artist || "") : "";
+  if (titleEl)  titleEl.value  = found ? (data.title  || fallbackTitle) : fallbackTitle;
 
   const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
   modal.show();

@@ -96,19 +96,6 @@
   <!-- Lijevo: target runda + lokalni repo -->
   <div class="col-md-5">
 
-    <div class="card bg-dark border-secondary mb-3">
-      <div class="card-body p-2 d-flex align-items-center justify-content-between">
-        <span class="text-white fw-bold small">CILJANA RUNDA:</span>
-        <select id="targetRound" class="form-select form-select-sm bg-black text-white border-secondary fw-bold text-center" style="width:150px;">
-          <option value="1" selected>RUNDA 1</option>
-          <option value="2">RUNDA 2</option>
-          <option value="3">RUNDA 3</option>
-          <option value="4">RUNDA 4</option>
-          <option value="5">RUNDA 5</option>
-        </select>
-      </div>
-    </div>
-
     <div class="card border-secondary mb-3 bg-dark">
       <div class="card-header bg-secondary text-white small fw-bold">
         <i class="bi bi-folder2-open me-1" aria-hidden="true"></i> LOKALNI REPOZITORIJ
@@ -167,6 +154,16 @@
                 <div class="mb-2">
                   <label class="form-label">Naslov</label>
                   <input type="text" id="importTitle" class="form-control bg-black text-white" placeholder="Naslov">
+                </div>
+                <div class="mb-2">
+                  <label class="form-label">Runda</label>
+                  <select id="targetRound" class="form-select form-select-sm bg-black text-white border-secondary fw-bold text-center" style="width:100px;">
+                    <option value="1" selected>RUNDA 1</option>
+                    <option value="2">RUNDA 2</option>
+                    <option value="3">RUNDA 3</option>
+                    <option value="4">RUNDA 4</option>
+                    <option value="5">RUNDA 5</option>
+                  </select>
                 </div>
               </div>
               <div class="modal-footer">
@@ -275,8 +272,11 @@
               <tr class="q-row" id="qrow-{{ s.id }}"
                   data-round="{{ s.round_number }}"
                   data-id="{{ s.id }}">
-                <td class="ps-3" style="width:40px;">
+                <td class="ps-3" style="width:30px;">
                   <span class="badge bg-warning text-dark">R{{ s.round_number }}</span>
+                </td>
+                <td class="ps-3" style="width:30px;">
+                  <span class="badge bg-warning text-dark">P{{ s.song_position }}</span>
                 </td>
                 <td>
                   <div class="fw-bold text-white text-truncate" style="max-width: 250px;">{{ s.artist }}</div>
@@ -309,19 +309,6 @@
         {% endif %}
       </div>
     </div>
-
-    <!-- QR generator -->
-    <div class="card border-warning mt-3">
-      <div class="card-header bg-warning text-dark small fw-bold cursor-pointer" data-bs-toggle="collapse" data-bs-target="#qrBody">
-        <i class="bi bi-qr-code me-2" aria-hidden="true"></i>QR Generator za Timove (Klikni)
-      </div>
-      <div id="qrBody" class="collapse card-body bg-black">
-        <textarea id="teamsInput" class="form-control bg-dark text-white mb-2" rows="3" placeholder="Tim 1&#10;Tim 2..."></textarea>
-        <button class="btn btn-warning w-100 btn-sm" onclick="generateQR()">Generiraj</button>
-        <div id="qrPreview" class="d-none"></div>
-      </div>
-    </div>
-
   </div>
 </div>
 

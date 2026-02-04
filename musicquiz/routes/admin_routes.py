@@ -17,6 +17,7 @@ from musicquiz.models import Quiz, Song
 from musicquiz.services.quiz_service import get_active_quiz
 from musicquiz.services.deezer_service import query_deezer_metadata
 from config import Config
+from sqlalchemy import func
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -57,7 +58,7 @@ def admin_live():
     q = get_active_quiz()
     # Pošalji i sve kvizove kako bi admin mogao prebacivati aktivni kviz
     all_q = Quiz.query.order_by(Quiz.id.desc()).all()
-    songs = Song.query.filter_by(quiz_id=q.id).order_by(Song.id).all() if q else []
+    songs = Song.query.filter_by(quiz_id=q.id).order_by(Song.song_position).all() if q else []
     return render_template("admin_live.html", all_songs=songs, quiz=q, all_quizzes=all_q)
 
 
@@ -84,7 +85,7 @@ def switch_quiz():
 def admin_setup():
     q = get_active_quiz()
     all_q = Quiz.query.all()
-    songs = Song.query.filter_by(quiz_id=q.id).order_by(Song.id).all() if q else []
+    songs = Song.query.filter_by(quiz_id=q.id).order_by(Song.song_position).all() if q else []
 
     return render_template(
         "admin_setup.html",
@@ -220,6 +221,13 @@ def import_external_song():
 
         q = get_active_quiz()
 
+        
+        max_order = db.session.query(func.max(Song.song_position)) \
+            .filter(Song.quiz_id == q.id) \
+            .scalar()
+        next_order = (max_order or 0) + 1   
+
+
         safe_name = secure_filename(pure_filename)
 
         destination = os.path.join(Config.SONGS_DIR, safe_name)
@@ -228,6 +236,7 @@ def import_external_song():
 
         s = Song(
             quiz_id=q.id,
+            song_position=next_order,
             filename=safe_name,
             artist=artist,
             title=title,
@@ -243,6 +252,7 @@ def import_external_song():
             "status": "ok",
             "song": {
                 "id": s.id,
+                "order": s.song_position,
                 "artist": s.artist,
                 "title": s.title,
                 "filename": s.filename,
@@ -255,33 +265,6 @@ def import_external_song():
     except Exception as e:
         return jsonify({"status": "error", "msg": str(e)})
 
-
-# -------------------
-# ADD SONG (ADVANCED)
-# -------------------
-@admin_bp.route("/add_song_advanced", methods=["POST"])
-@login_required
-def add_song_advanced():
-    q = get_active_quiz()
-    d = request.json
-
-    s = Song(
-        quiz_id=q.id,
-        type=d.get("type"),
-        filename=d.get("filename"),
-        image_file=d.get("image_file"),
-        artist=d.get("artist"),
-        title=d.get("title"),
-        extra_data=d.get("extra_data"),
-        start_time=float(d.get("start_time", 0)),
-        duration=float(d.get("duration", 30)),
-        round_number=int(d.get("round", 1))
-    )
-
-    db.session.add(s)
-    db.session.commit()
-
-    return jsonify({"status": "ok"})
 
 
 # -------------------
