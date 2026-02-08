@@ -85,7 +85,7 @@
         <span id="player-name-display" class="fw-bold text-uppercase fs-5"></span>
       </div>
       <div class="text-center flex-grow-1">
-        <small class="text-muted d-block">Točke:</small>
+        <small class="text-muted d-block">Bodovi:</small>
         <span class="badge bg-warning text-dark fs-4" id="my-score">0</span>
       </div>
       <div class="text-end">
@@ -95,6 +95,18 @@
           <i class="bi bi-box-arrow-right me-1" aria-hidden="true"></i>
           Odjava
         </button>
+      </div>
+    </div>
+
+    <div id="player-countdown" class="d-none text-center mb-4">
+      <div class="card bg-dark border-danger">
+        <div class="card-header bg-danger text-white fw-bold text-center py-2">
+          RUNDA <span id="player-countdown-round">1</span> POCINJE
+        </div>
+        <div class="card-body py-4">
+          <div id="player-countdown-value" class="display-1 fw-bold text-warning">30</div>
+          <div class="text-muted text-uppercase small mt-2">Pripremi se</div>
+        </div>
       </div>
     </div>
 
@@ -159,6 +171,9 @@
 </div>
 
 <style>
+#player-countdown .display-1 {
+  letter-spacing: 2px;
+}
 #lock-overlay {
   position: fixed;
   top: 0;

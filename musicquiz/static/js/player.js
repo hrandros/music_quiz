@@ -8,6 +8,8 @@ let questionStartTime = 0;  // When the question started (for time tracking)
 let wakeLock = null;  // Wake Lock API reference
 let isAnswerLocked = false;  // Anti-cheat: track if answers are locked
 let cheatDetected = false;  // Track if cheating was detected
+let countdownInterval = null;
+let countdownRemaining = 0;
 
 
 // --- INICIJALIZACIJA (QR KOD LOGIN ILI LOKALNO SAČUVANA PRIJAVA) ---
@@ -124,7 +126,57 @@ socket.on('update_leaderboard', (allScores) => {
     }
 });
 
+function stopPlayerCountdown() {
+    if (countdownInterval) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+    }
+    const wrap = document.getElementById('player-countdown');
+    if (wrap) wrap.classList.add('d-none');
+}
+
+function startPlayerCountdown(seconds, roundNum) {
+    stopPlayerCountdown();
+    countdownRemaining = Math.max(0, parseInt(seconds, 10) || 30);
+
+    const wrap = document.getElementById('player-countdown');
+    const val = document.getElementById('player-countdown-value');
+    const round = document.getElementById('player-countdown-round');
+
+    if (round) round.textContent = String(roundNum || 1);
+    if (val) val.textContent = String(countdownRemaining);
+    if (wrap) wrap.classList.remove('d-none');
+
+    document.getElementById('answer-sheet').classList.add('d-none');
+    document.getElementById('graded-answer-display').classList.add('d-none');
+    const roundSummary = document.getElementById('round-summary-display');
+    if (roundSummary) roundSummary.classList.add('d-none');
+    document.getElementById('lock-overlay').classList.add('d-none');
+    document.getElementById('cheat-warning-overlay').classList.add('d-none');
+
+    countdownInterval = setInterval(() => {
+        countdownRemaining -= 1;
+        if (val) val.textContent = String(Math.max(0, countdownRemaining));
+
+        if (countdownRemaining <= 0) {
+            stopPlayerCountdown();
+            const sheet = document.getElementById('answer-sheet');
+            if (sheet) {
+                sheet.classList.remove('d-none');
+                sheet.innerHTML = `
+                    <div class="text-center text-muted mt-5 fade-in">
+                        <i class="bi bi-music-note-beamed fs-1"></i><br>
+                        Cekam pocetak pjesme...
+                    </div>`;
+            }
+        }
+    }, 1000);
+}
+
 function renderAnswerResult(data) {
+    const roundSummary = document.getElementById('round-summary-display');
+    if (roundSummary) roundSummary.classList.add('d-none');
+
     document.getElementById('answer-sheet').classList.add('d-none');
     document.getElementById('graded-answer-display').classList.remove('d-none');
     document.getElementById('lock-overlay').classList.add('d-none');
@@ -169,11 +221,15 @@ function renderAnswerResult(data) {
 
 // 1. Nova pjesma počinje -> Otključaj i prikaži polja prema tipu pitanja
 socket.on('player_unlock_input', (data) => {
+    stopPlayerCountdown();
     currentQuestionId = data.question_id;
     currentQuestionType = data.question_type || "audio";  // Default to audio
     questionStartTime = data.question_started_at || (Date.now() / 1000);  // Record start time in seconds
     isAnswerLocked = false;  // Reset lock state for new question
     cheatDetected = false;  // Reset cheat detection
+
+    const roundSummary = document.getElementById('round-summary-display');
+    if (roundSummary) roundSummary.classList.add('d-none');
 
     // Sakrij overlay "Zaključano" i prikaži input sheet
     document.getElementById('lock-overlay').classList.add('d-none');
@@ -663,7 +719,7 @@ socket.on('player_show_round_summary', (data) => {
         <h3 class="text-center text-warning fw-bold mb-4">RUNDA ${roundNum} - ZAVRŠENA!</h3>
         <div class="card bg-dark border-warning mb-4">
             <div class="card-header bg-warning text-dark fw-bold text-center py-2">
-                TVA BODOVANJA ZA RUNDU
+                TVOJI BODOVI ZA OVU RUNDU
             </div>
             <div class="card-body p-0">
                 <div style="max-height: 50vh; overflow-y: auto;">
@@ -708,4 +764,11 @@ socket.on('player_show_round_summary', (data) => {
             </div>
         </div>
     `;
+});
+
+// Round countdown before autoplay starts
+socket.on('round_countdown_start', (data) => {
+    const seconds = data.seconds || 30;
+    const roundNum = data.round || 1;
+    startPlayerCountdown(seconds, roundNum);
 });

@@ -61,6 +61,9 @@ socket.on('round_countdown_start', (data) => {
     const roundNum = data.round || 1;
     console.log(`⏲️ Runda ${roundNum} počinje za 30 sekundi...`);
 
+    const roundDisplay = document.getElementById('roundDisplay');
+    if (roundDisplay) roundDisplay.innerText = String(roundNum);
+
     // Show countdown using existing game-area layout
     document.getElementById('welcome-area')?.classList.add('d-none');
     document.getElementById('correct-answer-display')?.classList.add('d-none');
@@ -99,10 +102,21 @@ socket.on('play_audio', (data) => {
     // Reset teksta i vizuala
     const songDisplay = document.getElementById('songDisplay');
     const displayIndex = data.question_index || data.id || '';
-    songDisplay.innerText = `${displayIndex}. PITANJE U TIJEKU...`;
+    const questionType = data.question_type || "audio";
+    if (songDisplay) {
+        if (questionType === "text" || questionType === "text_multiple") {
+            const questionText = data.question_text || 'PITANJE';
+            songDisplay.innerHTML = `${displayIndex}. PITANJE U TIJEKU...<div class="text-warning mt-3">${questionText}</div>`;
+        } else {
+            songDisplay.innerText = `${displayIndex}. PITANJE U TIJEKU...`;
+        }
+    }
     songDisplay.classList.remove('d-none');
 
     document.getElementById('statusLabel').innerText = `RUNDA ${data.round || ''}`;
+
+    const roundDisplay = document.getElementById('roundDisplay');
+    if (roundDisplay && data.round) roundDisplay.innerText = String(data.round);
 
     // Pokreni tajmer - koristi duration poslan s admin_events.py
     const duration = data.duration || 20;
@@ -110,7 +124,6 @@ socket.on('play_audio', (data) => {
     startTimer(duration);
 
     // Handle media playback based on question type
-    const questionType = data.question_type || "audio";
     const questionTextEl = document.getElementById('questionText');
     const questionTextValue = document.getElementById('questionTextValue');
 
@@ -119,7 +132,7 @@ socket.on('play_audio', (data) => {
 
     if ((questionType === "text" || questionType === "text_multiple") && questionTextEl && questionTextValue) {
         questionTextValue.textContent = data.question_text || 'PITANJE';
-        questionTextEl.classList.remove('d-none');
+        questionTextEl.classList.add('d-none');
     }
 
     if (questionType === "simultaneous" && questionTextEl && questionTextValue) {
@@ -239,6 +252,9 @@ socket.on('screen_show_welcome', (data) => {
 socket.on('screen_show_round_summary', (data) => {
     const roundNum = data.round;
     const songs = data.songs || [];
+
+    const roundDisplay = document.getElementById('roundDisplay');
+    if (roundDisplay) roundDisplay.innerText = String(roundNum || '');
 
     // Hide game area and show summary
     document.getElementById('game-area').classList.add('d-none');
