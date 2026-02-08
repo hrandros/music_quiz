@@ -134,6 +134,195 @@
       </div>
     </div>
 
+    <!-- Card: Kreiraj Pitanja -->
+    <div class="card border-info mb-3 bg-dark">
+      <div class="card-header bg-info text-dark small fw-bold">
+        <i class="bi bi-pencil-square me-1" aria-hidden="true"></i> KREIRAJ PITANJA
+      </div>
+      <div class="card-body p-2">
+        <div class="mb-2">
+          <label for="questionType" class="form-label small text-muted">Tip pitanja</label>
+          <select id="questionType" class="form-select form-select-sm bg-black text-white border-info fw-bold"
+                  onchange="SETUP.showQuestionPanel(this.value)">
+            <option value="">-- Odaberi tip --</option>
+            <option value="text">📝 Tekstualno pitanje</option>
+            <option value="multiple">🔘 Višestruki izbor</option>
+            <option value="video">🎬 Video pitanje</option>
+            <option value="simultaneous">🎵📝 Simultano (audio + tekst)</option>
+          </select>
+        </div>
+
+        <!-- Text Question Panel -->
+        <div id="textPanel" class="question-panel d-none">
+          <div class="mb-2">
+            <label for="textQuestion" class="form-label small text-muted">Pitanje</label>
+            <input type="text" id="textQuestion" class="form-control form-control-sm bg-black text-white"
+                   placeholder="Unesite pitanje...">
+          </div>
+          <div class="mb-2">
+            <label for="textAnswer" class="form-label small text-muted">Točan odgovor</label>
+            <input type="text" id="textAnswer" class="form-control form-control-sm bg-black text-white"
+                   placeholder="Unesite točan odgovor...">
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-8">
+              <label for="textRound" class="form-label small text-muted">Runda</label>
+              <select id="textRound" class="form-select form-select-sm bg-black text-white border-secondary">
+                <option value="1">RUNDA 1</option>
+                <option value="2">RUNDA 2</option>
+                <option value="3">RUNDA 3</option>
+                <option value="4">RUNDA 4</option>
+                <option value="5">RUNDA 5</option>
+              </select>
+            </div>
+            <div class="col-4">
+              <label for="textDuration" class="form-label small text-muted">Trajanje (s)</label>
+              <input type="number" id="textDuration" class="form-control form-control-sm bg-black text-white"
+                     value="30" min="5" max="120">
+            </div>
+          </div>
+          <button class="btn btn-sm btn-success w-100" onclick="SETUP.createTextQuestion()">Dodaj</button>
+        </div>
+
+        <!-- Multiple Choice Panel -->
+        <div id="multiplePanel" class="question-panel d-none">
+          <div class="mb-2">
+            <label for="multipleQuestion" class="form-label small text-muted">Pitanje</label>
+            <input type="text" id="multipleQuestion" class="form-control form-control-sm bg-black text-white"
+                   placeholder="Unesite pitanje...">
+          </div>
+          <div class="mb-2">
+            <label for="multipleChoices" class="form-label small text-muted">Mogućnosti (jedan po redu)</label>
+            <textarea id="multipleChoices" class="form-control form-control-sm bg-black text-white"
+                      rows="4" placeholder="Mogućnost 1&#10;Mogućnost 2&#10;Mogućnost 3&#10;Mogućnost 4"></textarea>
+          </div>
+          <div class="mb-2">
+            <label for="multipleCorrect" class="form-label small text-muted">Točan odgovor (redni broj počevši od 1)</label>
+            <input type="number" id="multipleCorrect" class="form-control form-control-sm bg-black text-white"
+                   value="1" min="1" max="10">
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-8">
+              <label for="multipleRound" class="form-label small text-muted">Runda</label>
+              <select id="multipleRound" class="form-select form-select-sm bg-black text-white border-secondary">
+                <option value="1">RUNDA 1</option>
+                <option value="2">RUNDA 2</option>
+                <option value="3">RUNDA 3</option>
+                <option value="4">RUNDA 4</option>
+                <option value="5">RUNDA 5</option>
+              </select>
+            </div>
+            <div class="col-4">
+              <label for="multipleDuration" class="form-label small text-muted">Trajanje (s)</label>
+              <input type="number" id="multipleDuration" class="form-control form-control-sm bg-black text-white"
+                     value="30" min="5" max="120">
+            </div>
+          </div>
+          <button class="btn btn-sm btn-success w-100" onclick="SETUP.createMultipleChoiceQuestion()">Dodaj</button>
+        </div>
+
+        <!-- Video Question Panel -->
+        <div id="videoPanel" class="question-panel d-none">
+          <div class="mb-2">
+            <label for="videoFilename" class="form-label small text-muted">Datoteka videa (naziv iz /videos)</label>
+            <input type="text" id="videoFilename" class="form-control form-control-sm bg-black text-white"
+                   placeholder="npr: video.mp4">
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-6">
+              <label for="videoArtist" class="form-label small text-muted">Izvođač/Naslov</label>
+              <input type="text" id="videoArtist" class="form-control form-control-sm bg-black text-white"
+                     placeholder="Izvođač">
+            </div>
+            <div class="col-6">
+              <label for="videoTitle" class="form-label small text-muted">&nbsp;</label>
+              <input type="text" id="videoTitle" class="form-control form-control-sm bg-black text-white"
+                     placeholder="Naslov">
+            </div>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-6">
+              <label for="videoStart" class="form-label small text-muted">Početak (s)</label>
+              <input type="number" id="videoStart" class="form-control form-control-sm bg-black text-white"
+                     value="0" min="0" step="0.1">
+            </div>
+            <div class="col-6">
+              <label for="videoDuration" class="form-label small text-muted">Trajanje (s)</label>
+              <input type="number" id="videoDuration" class="form-control form-control-sm bg-black text-white"
+                     value="30" min="5" max="120">
+            </div>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-8">
+              <label for="videoRound" class="form-label small text-muted">Runda</label>
+              <select id="videoRound" class="form-select form-select-sm bg-black text-white border-secondary">
+                <option value="1">RUNDA 1</option>
+                <option value="2">RUNDA 2</option>
+                <option value="3">RUNDA 3</option>
+                <option value="4">RUNDA 4</option>
+                <option value="5">RUNDA 5</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn btn-sm btn-success w-100" onclick="SETUP.createVideoQuestion()">Dodaj</button>
+        </div>
+
+        <!-- Simultaneous Panel -->
+        <div id="simultaneousPanel" class="question-panel d-none">
+          <div class="mb-2">
+            <label for="simultaneousFilename" class="form-label small text-muted">Datoteka glazbe (naziv iz /songs)</label>
+            <input type="text" id="simultaneousFilename" class="form-control form-control-sm bg-black text-white"
+                   placeholder="npr: song.mp3">
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-6">
+              <label for="simultaneousArtist" class="form-label small text-muted">Izvođač</label>
+              <input type="text" id="simultaneousArtist" class="form-control form-control-sm bg-black text-white"
+                     placeholder="Izvođač">
+            </div>
+            <div class="col-6">
+              <label for="simultaneousTitle" class="form-label small text-muted">Naslov</label>
+              <input type="text" id="simultaneousTitle" class="form-control form-control-sm bg-black text-white"
+                     placeholder="Naslov">
+            </div>
+          </div>
+          <div class="mb-2">
+            <label for="simultaneousExtra" class="form-label small text-muted">Dodatno pitanje</label>
+            <input type="text" id="simultaneousExtra" class="form-control form-control-sm bg-black text-white"
+                   placeholder="npr: Dovršite stih: '...'">
+          </div>
+          <div class="mb-2">
+            <label for="simultaneousExtraAnswer" class="form-label small text-muted">Točan odgovor</label>
+            <input type="text" id="simultaneousExtraAnswer" class="form-control form-control-sm bg-black text-white"
+                   placeholder="Točan odgovor za dodatno pitanje">
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-6">
+              <label for="simultaneousStart" class="form-label small text-muted">Početak (s)</label>
+              <input type="number" id="simultaneousStart" class="form-control form-control-sm bg-black text-white"
+                     value="0" min="0" step="0.1">
+            </div>
+            <div class="col-6">
+              <label for="simultaneousDuration" class="form-label small text-muted">Trajanje (s)</label>
+              <input type="number" id="simultaneousDuration" class="form-control form-control-sm bg-black text-white"
+                     value="30" min="5" max="120">
+            </div>
+          </div>
+          <div class="mb-2">
+            <label for="simultaneousRound" class="form-label small text-muted">Runda</label>
+            <select id="simultaneousRound" class="form-select form-select-sm bg-black text-white border-secondary">
+              <option value="1">RUNDA 1</option>
+              <option value="2">RUNDA 2</option>
+              <option value="3">RUNDA 3</option>
+              <option value="4">RUNDA 4</option>
+              <option value="5">RUNDA 5</option>
+            </select>
+          </div>
+          <button class="btn btn-sm btn-success w-100" onclick="SETUP.createSimultaneousQuestion()">Dodaj</button>
+        </div>
+      </div>
+    </div>
+
         <!-- Modal: import song (enter artist/title) -->
         <div class="modal fade" id="importSongModal" tabindex="-1">
           <div class="modal-dialog">
@@ -144,19 +333,19 @@
               </div>
               <div class="modal-body">
                 <div class="mb-2">
-                  <label class="form-label small text-muted">Datoteka</label>
+                  <label for="importFilename" class="form-label small text-muted">Datoteka</label>
                   <input type="text" id="importFilename" class="form-control bg-black text-white" readonly>
                 </div>
                 <div class="mb-2">
-                  <label class="form-label">Izvođač</label>
+                  <label for="importArtist" class="form-label">Izvođač</label>
                   <input type="text" id="importArtist" class="form-control bg-black text-white" placeholder="Izvođač">
                 </div>
                 <div class="mb-2">
-                  <label class="form-label">Naslov</label>
+                  <label for="importTitle" class="form-label">Naslov</label>
                   <input type="text" id="importTitle" class="form-control bg-black text-white" placeholder="Naslov">
                 </div>
                 <div class="mb-2">
-                  <label class="form-label">Runda</label>
+                  <label for="targetRound" class="form-label">Runda</label>
                   <select id="targetRound" class="form-select form-select-sm bg-black text-white border-secondary fw-bold text-center" style="width:100px;">
                     <option value="1" selected>RUNDA 1</option>
                     <option value="2">RUNDA 2</option>
@@ -193,7 +382,7 @@
           <input type="hidden" id="editId">
           <div class="col-6">
             <div class="row align-items-center">
-              <label class="col-auto col-form-label small text-muted">Izvođač</label>
+              <label for="editArtist" class="col-auto col-form-label small text-muted">Izvođač</label>
               <div class="col">
                 <input type="text" id="editArtist"
                       class="form-control form-control-sm bg-black text-white"
@@ -204,7 +393,7 @@
 
           <div class="col-6">
             <div class="row align-items-center">
-              <label class="col-auto col-form-label small text-muted">Naslov</label>
+              <label for="editTitle" class="col-auto col-form-label small text-muted">Naslov</label>
               <div class="col">
                 <input type="text" id="editTitle"
                       class="form-control form-control-sm bg-black text-white"
@@ -275,7 +464,7 @@
                 <td class="ps-3" style="width:30px;">
                   <span class="badge bg-warning text-dark">R{{ s.round_number }}</span>
                 </td>
-                <td class="ps-3" style="width:30px;">
+                <td class="ps-2" style="width:30px;">
                   <span class="badge bg-warning text-dark">P{{ s.song_position }}</span>
                 </td>
                 <td>

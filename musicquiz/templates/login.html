@@ -1,29 +1,79 @@
 {% extends "base.html" %}
-{% block title %}Admin Login{% endblock %}
+{% block title %}Admin Login • Rock Quiz{% endblock %}
 {% block nav %}
 <div class="container">
     <a class="navbar-brand fw-bold text-white" href="{{ url_for('public.index') }}" style="font-family: 'Oswald'; font-size: 1.5rem; letter-spacing: 1px;">
-        <i class="bi bi-lightning-charge-fill text-danger me-1"></i> ROCK<span class="text-danger">QUIZ</span>
+        <i class="bi bi-lightning-charge-fill text-danger me-1" aria-hidden="true"></i> ROCK<span class="text-danger">QUIZ</span>
     </a>
 </div>
 {% endblock %}
 {% block content %}
-<div class="row justify-content-center mt-5">
-    <div class="col-md-4">
-        <div class="card shadow-lg border-danger">
-            <div class="card-header bg-danger text-white text-center fw-bold">
-                <i class="bi bi-shield-lock-fill me-2"></i>ADMIN AREA
+<div class="row justify-content-center min-vh-80">
+    <div class="col-12 col-sm-8 col-md-6 col-lg-4 d-flex align-items-center">
+        <div class="card shadow-lg border-danger w-100">
+            <div class="card-header bg-danger text-white text-center fw-bold py-3">
+                <i class="bi bi-shield-lock-fill me-2" aria-hidden="true"></i>
+                <span>ADMIN PRISTUP</span>
             </div>
             <div class="card-body bg-black p-4">
-                <form method="POST">
+                <form method="POST" novalidate>
                     <div class="mb-3">
-                        <label class="text-white mb-2">Lozinka</label>
-                        <input type="password" name="password" class="form-control text-center fs-4 bg-dark text-white border-secondary" autofocus>
+                        <label for="adminPassword" class="form-label text-white fw-bold mb-2">
+                            <i class="bi bi-key-fill me-2 text-warning" aria-hidden="true"></i>Lozinka
+                        </label>
+                        <div class="input-group">
+                            <input type="password" id="adminPassword" name="password"
+                                   class="form-control form-control-lg text-center bg-dark text-white border-secondary"
+                                   placeholder="••••••••"
+                                   aria-label="Unesite lozinku za pristup admin panelu"
+                                   aria-describedby="passwordHint"
+                                   autocomplete="current-password"
+                                   required autofocus>
+                            <button type="button" class="btn btn-outline-secondary" id="togglePassword"
+                                    title="Prikaži/sakrij lozinku" aria-label="Prikaži/sakrij lozinku">
+                                <i class="bi bi-eye-fill" aria-hidden="true"></i>
+                            </button>
+                        </div>
+                        <small id="passwordHint" class="text-muted d-block mt-1">
+                            Unesite administratorsku lozinku
+                        </small>
                     </div>
-                    <button type="submit" class="btn btn-danger w-100 fw-bold">ULAZ</button>
+                    <button type="submit" class="btn btn-danger btn-lg w-100 fw-bold">
+                        <i class="bi bi-box-arrow-in-right me-2" aria-hidden="true"></i>ULAZ
+                    </button>
                 </form>
+            </div>
+            <div class="card-footer bg-black border-secondary text-center text-muted small py-2">
+                Samo za autorizirane administratore
             </div>
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const passwordInput = document.getElementById('adminPassword');
+    const toggleBtn = document.getElementById('togglePassword');
+
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', function() {
+            const isPasswordField = passwordInput.type === 'password';
+            passwordInput.type = isPasswordField ? 'text' : 'password';
+
+            // Update icon
+            const icon = this.querySelector('i');
+            icon.className = isPasswordField ? 'bi bi-eye-slash-fill' : 'bi bi-eye-fill';
+
+            // Update aria label
+            this.setAttribute('aria-label', isPasswordField ? 'Sakrij lozinku' : 'Prikaži lozinku');
+        });
+    }
+});
+</script>
+
+<style>
+.min-vh-80 {
+    min-height: 80vh;
+}
+</style>
 {% endblock %}

@@ -13,13 +13,42 @@ from flask import (
 from werkzeug.utils import secure_filename
 
 from extensions import db
-from musicquiz.models import Quiz, Song
+from musicquiz.models import (
+    Quiz,
+    Question,
+    Song,
+    Video,
+    TextQuestion,
+    TextMultiple,
+    SimultaneousQuestion,
+)
 from musicquiz.services.quiz_service import get_active_quiz
 from musicquiz.services.deezer_service import query_deezer_metadata
+from musicquiz.services.question_service import get_question_display
 from config import Config
 from sqlalchemy import func
 
 admin_bp = Blueprint("admin", __name__)
+
+
+def _get_next_position(quiz_id, round_number):
+    max_pos = db.session.query(func.max(Question.position)) \
+        .filter(Question.quiz_id == quiz_id) \
+        .filter(Question.round_number == round_number) \
+        .scalar()
+    return (max_pos or 0) + 1
+
+
+def _validate_round(round_number):
+    return 1 <= int(round_number) <= 5
+
+
+def _get_question_list(quiz_id):
+    questions = Question.query.filter_by(quiz_id=quiz_id).order_by(
+        Question.round_number,
+        Question.position
+    ).all()
+    return [get_question_display(q) for q in questions]
 
 
 # -------------------
@@ -58,7 +87,7 @@ def admin_live():
     q = get_active_quiz()
     # Pošalji i sve kvizove kako bi admin mogao prebacivati aktivni kviz
     all_q = Quiz.query.order_by(Quiz.id.desc()).all()
-    songs = Song.query.filter_by(quiz_id=q.id).order_by(Song.song_position).all() if q else []
+    songs = _get_question_list(q.id) if q else []
     return render_template("admin_live.html", all_songs=songs, quiz=q, all_quizzes=all_q)
 
 
@@ -85,7 +114,7 @@ def switch_quiz():
 def admin_setup():
     q = get_active_quiz()
     all_q = Quiz.query.all()
-    songs = Song.query.filter_by(quiz_id=q.id).order_by(Song.song_position).all() if q else []
+    songs = _get_question_list(q.id) if q else []
 
     return render_template(
         "admin_setup.html",
@@ -222,10 +251,11 @@ def import_external_song():
         q = get_active_quiz()
 
         
-        max_order = db.session.query(func.max(Song.song_position)) \
-            .filter(Song.quiz_id == q.id) \
-            .scalar()
-        next_order = (max_order or 0) + 1   
+        round_num = int(data.get("round", 1))
+        if not _validate_round(round_num):
+            return jsonify({"status": "error", "msg": "Round must be between 1 and 5"}), 400
+
+        next_order = _get_next_position(q.id, round_num)
 
 
         safe_name = secure_filename(pure_filename)
@@ -234,15 +264,22 @@ def import_external_song():
 
         shutil.copy2(source_path, destination)
 
-        s = Song(
+        question = Question(
             quiz_id=q.id,
-            song_position=next_order,
+            round_number=round_num,
+            position=next_order,
+            type="audio",
+            duration=30.0,
+        )
+        db.session.add(question)
+        db.session.flush()
+
+        s = Song(
+            question_id=question.id,
             filename=safe_name,
             artist=artist,
             title=title,
             start_time=0.0,
-            duration=30.0,
-            round_number=int(data.get("round", 1))
         )
 
         db.session.add(s)
@@ -250,16 +287,7 @@ def import_external_song():
 
         return jsonify({
             "status": "ok",
-            "song": {
-                "id": s.id,
-                "order": s.song_position,
-                "artist": s.artist,
-                "title": s.title,
-                "filename": s.filename,
-                "start": s.start_time,
-                "duration": s.duration,
-                "round": s.round_number
-            }
+            "song": get_question_display(question)
         })
 
     except Exception as e:
@@ -273,7 +301,13 @@ def import_external_song():
 @admin_bp.route("/remove_song", methods=["POST"])
 @login_required
 def remove_song():
-    Song.query.filter_by(id=request.json.get("id")).delete()
+    from musicquiz.models import Answer
+
+    question_id = request.json.get("id")
+    Answer.query.filter_by(question_id=question_id).delete()
+    question = Question.query.get(question_id)
+    if question:
+        db.session.delete(question)
     db.session.commit()
     return jsonify({"status": "ok"})
 
@@ -285,15 +319,307 @@ def remove_song():
 @login_required
 def update_song():
     data = request.json
-    song = Song.query.get(data.get("id"))
+    question = Question.query.get(data.get("id"))
 
-    if not song:
-        return jsonify({"status": "error", "msg": "Song not found"}), 404
+    if not question:
+        return jsonify({"status": "error", "msg": "Question not found"}), 404
+
+    if question.type != "audio" or not question.song:
+        return jsonify({"status": "error", "msg": "Only audio questions can be edited here"}), 400
+
+    song = question.song
 
     song.artist = data.get("artist")
     song.title = data.get("title")
     song.start_time = float(data.get("start"))
-    song.duration = float(data.get("duration"))
+    question.duration = float(data.get("duration"))
 
     db.session.commit()
     return jsonify({"status": "ok"})
+
+
+@admin_bp.route("/api/update_score", methods=["POST"])
+@login_required
+def api_update_score():
+    """API endpoint za ažuriranje bodova iz grading tablice."""
+    try:
+        from musicquiz.models import Answer
+
+        data = request.json
+        answer_id = data.get("answer_id")
+        score_type = data.get("type")
+        score_value = float(data.get("value", -1))
+
+        # Validacija
+        if score_value not in [0, 0.5, 1.0]:
+            return jsonify({"status": "error", "msg": "Invalid score value"}), 400
+
+        if score_type not in ["artist", "title", "extra"]:
+            return jsonify({"status": "error", "msg": "Invalid score type"}), 400
+
+        ans = Answer.query.get(answer_id)
+        if not ans:
+            return jsonify({"status": "error", "msg": "Answer not found"}), 404
+
+        if score_type == "artist":
+            ans.artist_points = score_value
+        elif score_type == "title":
+            ans.title_points = score_value
+        else:
+            ans.extra_points = score_value
+
+        db.session.commit()
+        return jsonify({"status": "ok"})
+
+    except Exception as e:
+        return jsonify({"status": "error", "msg": str(e)}), 500
+
+
+# -------------------
+# REORDER SONGS
+# -------------------
+@admin_bp.route("/reorder_songs", methods=["POST"])
+@login_required
+def reorder_songs():
+    """Ažurira poziciju pjesama na osnovu redoslijeda iz drag-and-drop."""
+    try:
+        data = request.json
+        ids = data.get("ids", [])
+
+        if not ids:
+            return jsonify({"status": "error", "msg": "No IDs provided"}), 400
+
+        questions = Question.query.filter(Question.id.in_(ids)).all()
+        question_map = {q.id: q for q in questions}
+        round_counters = {}
+        updated = []
+
+        for qid in ids:
+            question = question_map.get(qid)
+            if not question:
+                continue
+            round_num = question.round_number
+            round_counters[round_num] = round_counters.get(round_num, 0) + 1
+            question.position = round_counters[round_num]
+            updated.append({
+                "id": question.id,
+                "round_number": round_num,
+                "position": question.position,
+            })
+
+        db.session.commit()
+        return jsonify({"status": "ok", "updated": updated})
+
+    except Exception as e:
+        return jsonify({"status": "error", "msg": str(e)}), 500
+
+
+# -------------------
+# CREATE QUESTION TYPES
+# -------------------
+
+@admin_bp.route("/create_text_question", methods=["POST"])
+@login_required
+def create_text_question():
+    """Create a text answer question."""
+    try:
+        data = request.json
+        q = get_active_quiz()
+        if not q:
+            return jsonify({"status": "error", "msg": "No active quiz"}), 400
+
+        round_num = int(data.get("round", 1))
+        question_text = data.get("question_text", "")
+        answer_text = data.get("answer_text", "")
+
+        if not _validate_round(round_num):
+            return jsonify({"status": "error", "msg": "Round must be between 1 and 5"}), 400
+
+        if not question_text or not answer_text:
+            return jsonify({"status": "error", "msg": "Question text and answer are required"}), 400
+
+        next_pos = _get_next_position(q.id, round_num)
+
+        question = Question(
+            quiz_id=q.id,
+            type="text",
+            round_number=round_num,
+            position=next_pos,
+            duration=float(data.get("duration", 30.0))
+        )
+        db.session.add(question)
+        db.session.flush()
+
+        text_row = TextQuestion(
+            question_id=question.id,
+            question_text=question_text,
+            answer_text=answer_text,
+        )
+        db.session.add(text_row)
+        db.session.commit()
+
+        return jsonify({
+            "status": "ok",
+            "song": get_question_display(question)
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "msg": str(e)}), 500
+
+
+@admin_bp.route("/create_multiple_choice_question", methods=["POST"])
+@login_required
+def create_multiple_choice_question():
+    """Create a multiple choice question."""
+    try:
+        data = request.json
+        q = get_active_quiz()
+        if not q:
+            return jsonify({"status": "error", "msg": "No active quiz"}), 400
+
+        round_num = int(data.get("round", 1))
+        question_text = data.get("question_text", "")
+        choices = data.get("choices", [])
+        correct_idx = int(data.get("correct_idx", 0))
+
+        if not _validate_round(round_num):
+            return jsonify({"status": "error", "msg": "Round must be between 1 and 5"}), 400
+
+        if not question_text or not choices or len(choices) < 2:
+            return jsonify({"status": "error", "msg": "Need question text and 2+ choices"}), 400
+
+        next_pos = _get_next_position(q.id, round_num)
+
+        question = Question(
+            quiz_id=q.id,
+            type="text_multiple",
+            round_number=round_num,
+            position=next_pos,
+            duration=float(data.get("duration", 30.0))
+        )
+        db.session.add(question)
+        db.session.flush()
+
+        text_row = TextMultiple(
+            question_id=question.id,
+            question_text=question_text,
+            correct_index=correct_idx,
+        )
+        text_row.set_choices(choices)
+        db.session.add(text_row)
+        db.session.commit()
+
+        return jsonify({
+            "status": "ok",
+            "song": get_question_display(question)
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "msg": str(e)}), 500
+
+
+@admin_bp.route("/create_video_question", methods=["POST"])
+@login_required
+def create_video_question():
+    """Create a video question."""
+    try:
+        data = request.json
+        q = get_active_quiz()
+        if not q:
+            return jsonify({"status": "error", "msg": "No active quiz"}), 400
+
+        round_num = int(data.get("round", 1))
+        filename = data.get("filename", "")
+        artist = data.get("artist", "?")
+        title = data.get("title", "?")
+
+        if not _validate_round(round_num):
+            return jsonify({"status": "error", "msg": "Round must be between 1 and 5"}), 400
+
+        if not filename:
+            return jsonify({"status": "error", "msg": "Video filename is required"}), 400
+
+        next_pos = _get_next_position(q.id, round_num)
+
+        question = Question(
+            quiz_id=q.id,
+            type="video",
+            round_number=round_num,
+            position=next_pos,
+            duration=float(data.get("duration", 30.0))
+        )
+        db.session.add(question)
+        db.session.flush()
+
+        video = Video(
+            question_id=question.id,
+            filename=filename,
+            artist=artist,
+            title=title,
+            start_time=float(data.get("start_time", 0.0)),
+        )
+        db.session.add(video)
+        db.session.commit()
+
+        return jsonify({
+            "status": "ok",
+            "song": get_question_display(question)
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "msg": str(e)}), 500
+
+
+@admin_bp.route("/create_simultaneous_question", methods=["POST"])
+@login_required
+def create_simultaneous_question():
+    """Create a simultaneous (audio + text) question."""
+    try:
+        data = request.json
+        q = get_active_quiz()
+        if not q:
+            return jsonify({"status": "error", "msg": "No active quiz"}), 400
+
+        round_num = int(data.get("round", 1))
+        filename = data.get("filename", "")
+        artist = data.get("artist", "?")
+        title = data.get("title", "?")
+        extra_question = data.get("extra_question", "")
+        extra_answer = data.get("extra_answer", "")
+
+        if not _validate_round(round_num):
+            return jsonify({"status": "error", "msg": "Round must be between 1 and 5"}), 400
+
+        if not filename:
+            return jsonify({"status": "error", "msg": "Audio filename is required"}), 400
+
+        if extra_question and not extra_answer:
+            return jsonify({"status": "error", "msg": "Extra answer is required"}), 400
+
+        next_pos = _get_next_position(q.id, round_num)
+
+        question = Question(
+            quiz_id=q.id,
+            type="simultaneous",
+            round_number=round_num,
+            position=next_pos,
+            duration=float(data.get("duration", 30.0))
+        )
+        db.session.add(question)
+        db.session.flush()
+
+        simultaneous = SimultaneousQuestion(
+            question_id=question.id,
+            filename=filename,
+            artist=artist,
+            title=title,
+            start_time=float(data.get("start_time", 0.0)),
+            extra_question=extra_question,
+            extra_answer=extra_answer,
+        )
+        db.session.add(simultaneous)
+        db.session.commit()
+
+        return jsonify({
+            "status": "ok",
+            "song": get_question_display(question)
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "msg": str(e)}), 500

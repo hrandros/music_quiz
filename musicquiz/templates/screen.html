@@ -37,6 +37,18 @@
   }
   .paused .bar { animation-play-state: paused; height: 5% !important; opacity: 0.2; }
 
+  #questionText {
+    max-width: 90%;
+    margin: 0 auto 2rem;
+    padding: 2rem 2.5rem;
+    border: 2px solid #444;
+    border-radius: 16px;
+    background: rgba(0, 0, 0, 0.5);
+    font-family: 'Oswald', sans-serif;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
   /* Odgovor koji se pojavljuje nakon pjesme */
   #correct-answer-display {
     text-align: center;
@@ -79,6 +91,10 @@
       </div>
 
       <div id="game-area" class="text-center w-100">
+          <div id="questionText" class="d-none">
+            <div class="text-warning small mb-2">PITANJE</div>
+            <h2 id="questionTextValue" class="text-white fw-bold"></h2>
+          </div>
           <div id="visualizer" class="mb-5 visualizer-container paused">
               {% for i in range(10) %}<div class="bar"></div>{% endfor %}
           </div>

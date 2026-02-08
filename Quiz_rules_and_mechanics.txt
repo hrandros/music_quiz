@@ -1,0 +1,39 @@
+Quiz Rules & Mechanics
+General Rules
+1.	Structure: The quiz consists of 5 rounds. Each round can have an unlimited number of questions (typically around 15).
+2.	Question Types:
+    a.	Audio: Music is played; players must identify the artist and song title.
+    b.	Text: A standard question that requires a specific answer.
+    c.	Video: A video clip is shown; players must identify the artist and song title.
+    d.	Simultaneous Audio & Text: For example, "Finish the Lyrics" format.
+3.	Response Formats:
+    a.	Text Input: Specific fields for specific data (e.g., one field for "Artist," another for "Song Title").
+    b.	Multiple Choice: Players select one correct answer from four provided options.
+4.	Timing: Players enter their answers while the question/media is active. Once the timer expires, the answer is locked, and no further edits are possible.
+5.	Scoring System:
+    a.	Text Answers: Scored as 1, 0.5, or 0 points based on accuracy.
+    b.	Multiple Choice: A time-sensitive factor is applied. For a 30-second clip, points are scaled:
+        i.	First 1/5 of time: 1.0 point
+        ii.	Second 1/5 of time: 0.8 points
+        iii.	(And so on, decreasing by 0.2 for each interval).
+6.	Input Integrity: If a question requires multiple answers, players must use the designated separate fields. Entering answers in random or incorrect fields is not allowed.
+7.	Fair Play: The use of external aids (other apps, exiting the quiz screen, etc.) is strictly prohibited.
+8.	Late Entry: Players can join the quiz at any time while it is in progress; pre-registration before the start is not mandatory.
+________________________________________
+Quiz Workflow (Game Flow)
+1.	Setup & Login: Once the quiz is prepared, the host launches it from a computer. A QR code for login and a list of joined players are displayed on the main TV screen. Players join via mobile by scanning the code.
+2.	Starting the Round: The host initiates the quiz. A 30-second countdown appears on the TV, after which Round 1 begins automatically.
+3.	During the Game: Questions follow the predefined sequence and duration.
+4.	Intermission (Between Questions): A 15-second break occurs between questions.
+    a.	TV Screen: Displays the correct answer and current leaderboard.
+    b.	Mobile Screen: Displays the points earned for the previous answer.
+5.	End of Round: After a round concludes, the TV displays all correct answers for that round and the updated rankings.
+6.	Host Review: Between rounds, the host reviews the automatically graded text answers and can manually adjust scores if necessary and finalize grading for each answer (e.g., recognizing a typo as a correct answer).
+7.	Continuing: Once the host confirms the scores, they trigger the next round, starting with another 30-second countdown.
+________________________________________
+Quiz Preparation (Backend)
+1.	Content Creation: The host defines all questions and correct answers.
+2.	Media Editing: For audio and video clips, the host must define specific start and end timestamps.
+3.	Categorization: Each question must be assigned a specific type (Audio, Video, Text, etc.).
+4.	Storage: Audio and video files are uploaded from a local repository.
+5.	Verification: The host may use integrated music APIs to verify the accuracy of song titles and artists during the setup process.

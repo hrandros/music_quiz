@@ -3,6 +3,7 @@ let wavesurfer = null;
 let wsRegions = null;
 let currentEditingId = null;
 SETUP._zoomPx = 0;
+let hasUnsavedChanges = false;
 
 document.addEventListener('DOMContentLoaded', function () {
   if (typeof flatpickr !== 'undefined') {
@@ -36,6 +37,46 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 document.addEventListener("DOMContentLoaded", () => {
+  // Track unsaved changes in editor form
+  const editForm = [
+    document.getElementById('editArtist'),
+    document.getElementById('editTitle')
+  ].filter(el => el);
+
+  editForm.forEach(input => {
+    input?.addEventListener('change', () => {
+      hasUnsavedChanges = true;
+    });
+  });
+});
+
+// Warn user before leaving with unsaved changes
+window.addEventListener('beforeunload', (e) => {
+  if (hasUnsavedChanges) {
+    e.preventDefault();
+    e.returnValue = 'Imate nespremljene promjene. Sigurni ste da želite otići?';
+    return e.returnValue;
+  }
+});
+
+// Allow navigating within the site without warning if coming from same origin
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('a').forEach(link => {
+    if (link.hostname === window.location.hostname) {
+      link.addEventListener('click', (e) => {
+        if (hasUnsavedChanges) {
+          if (!confirm('Imate nespremljene promjene. Sigurni ste da želite otići bez spremanja?')) {
+            e.preventDefault();
+          } else {
+            hasUnsavedChanges = false; // Reset flag if user confirms navigation
+          }
+        }
+      });
+    }
+  });
+});
+
+document.addEventListener("DOMContentLoaded", () => {
   try { SETUP.initWaveSurfer(); } catch (e) { console.error("WaveSurfer init error:", e); }
   const el = document.getElementById('quizSongsList');
   if (el && typeof Sortable !== 'undefined') {
@@ -48,11 +89,15 @@ document.addEventListener("DOMContentLoaded", () => {
         .filter(n => !isNaN(n));
 
       try {
-        await fetch("/admin/reorder_songs", {
+        const res = await fetch("/admin/reorder_songs", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ids })
         });
+        const data = await res.json();
+        if (data.status === 'ok' && Array.isArray(data.updated)) {
+          SETUP.applyUpdatedPositions(data.updated);
+        }
       } catch (e) {
         console.error("Reorder failed", e);
       }
@@ -96,8 +141,13 @@ function addSongToTableHTML(s) {
 
   const tdBadge = document.createElement('td');
   tdBadge.className = 'ps-3';
-  tdBadge.style.width = '40px';
+  tdBadge.style.width = '30px';
   tdBadge.innerHTML = `<span class="badge bg-warning text-dark">R${s.round}</span>`;
+
+  const tdPosition = document.createElement('td');
+  tdPosition.className = 'ps-2';
+  tdPosition.style.width = '30px';
+  tdPosition.innerHTML = `<span class="badge bg-warning text-dark">P${s.order || s.song_position || 1}</span>`;
 
   const tdText = document.createElement('td');
   const artistDiv = createEl('div', 'fw-bold text-white text-truncate', s.artist || '');
@@ -134,10 +184,22 @@ function addSongToTableHTML(s) {
   tdAct.appendChild(group);
 
   tr.appendChild(tdBadge);
+  tr.appendChild(tdPosition);
   tr.appendChild(tdText);
   tr.appendChild(tdAct);
   tbody.appendChild(tr);
 }
+
+SETUP.applyUpdatedPositions = function(updated) {
+  updated.forEach(item => {
+    const row = document.getElementById('qrow-' + item.id);
+    if (!row) return;
+    const posBadge = row.querySelector('td:nth-child(2) .badge');
+    if (posBadge) {
+      posBadge.textContent = 'P' + item.position;
+    }
+  });
+};
 
 function openNewQuizModal() {
     if (window.SETUP?.closeEditor) SETUP.closeEditor();
@@ -494,6 +556,7 @@ SETUP.closeEditor = function () {
   if (panel) panel.style.display = 'none';
   if (wavesurfer) wavesurfer.pause();
   document.querySelectorAll('.q-row').forEach(r => r.classList.remove('editing-row'));
+  hasUnsavedChanges = false; // Reset flag when editor is closed
 };
 
 SETUP.saveChanges = async function () {
@@ -523,6 +586,7 @@ SETUP.saveChanges = async function () {
     });
     const data = await res.json();
     if (data.status === 'ok') {
+      hasUnsavedChanges = false; // Reset flag on successful save
       location.reload();
     } else {
       alert("Greška pri spremanju!");
@@ -724,6 +788,8 @@ SETUP.importSong = async function (ev, fullPath, filename, artist = "", title = 
       addSongToTableHTML(data.song);
       const emptyMsg = document.querySelector('.table-container .text-center');
       if (emptyMsg) emptyMsg.style.display = 'none';
+      const table = document.querySelector('.table-container .table');
+      if (table) table.classList.remove('d-none');
     } else {
       alert("Greška: " + (data.msg || 'Neuspješno'));
       if (btn) {
@@ -957,3 +1023,250 @@ SETUP.renderTimeMarks = function () {
 window.addEventListener('resize', function () {
   try { SETUP.queueRenderMarks(); } catch (e) {}
 });
+
+// --- QUESTION CREATION ---
+
+SETUP.showQuestionPanel = function(type) {
+  // Hide all panels
+  document.querySelectorAll('.question-panel').forEach(p => p.classList.add('d-none'));
+
+  // Show selected panel
+  const panelMap = {
+    'text': 'textPanel',
+    'multiple': 'multiplePanel',
+    'video': 'videoPanel',
+    'simultaneous': 'simultaneousPanel'
+  };
+
+  if (panelMap[type]) {
+    const panel = document.getElementById(panelMap[type]);
+    if (panel) panel.classList.remove('d-none');
+  }
+};
+
+SETUP.createTextQuestion = async function() {
+  const question = document.getElementById('textQuestion').value.trim();
+  const answer = document.getElementById('textAnswer').value.trim();
+  const round = document.getElementById('textRound').value;
+  const duration = parseFloat(document.getElementById('textDuration').value);
+
+  if (!question || !answer) {
+    alert('Unesite pitanje i tocan odgovor!');
+    return;
+  }
+
+  try {
+    const res = await fetch('/admin/create_text_question', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question_text: question,
+        answer_text: answer,
+        round: parseInt(round),
+        duration: duration
+      })
+    });
+
+    const data = await res.json();
+    if (data.status === 'ok') {
+      addSongToTableHTML(data.song);
+      const emptyMsg = document.querySelector('.table-container .text-center');
+      if (emptyMsg) emptyMsg.style.display = 'none';
+      const table = document.querySelector('.table-container .table');
+      if (table) table.classList.remove('d-none');
+
+      // Clear form
+      document.getElementById('textQuestion').value = '';
+      document.getElementById('textAnswer').value = '';
+      document.getElementById('questionType').value = '';
+      SETUP.showQuestionPanel('');
+
+      alert('Pitanje dodano!');
+    } else {
+      alert('Greška: ' + (data.msg || 'Neuspješno'));
+    }
+  } catch (e) {
+    console.error(e);
+    alert('Greška pri dodavanju pitanja');
+  }
+};
+
+SETUP.createMultipleChoiceQuestion = async function() {
+  const question = document.getElementById('multipleQuestion').value.trim();
+  const choicesText = document.getElementById('multipleChoices').value.trim();
+  const correctIdx = parseInt(document.getElementById('multipleCorrect').value) - 1;
+  const round = document.getElementById('multipleRound').value;
+  const duration = parseFloat(document.getElementById('multipleDuration').value);
+
+  if (!question) {
+    alert('Unesite pitanje!');
+    return;
+  }
+
+  const choices = choicesText.split('\n').map(c => c.trim()).filter(c => c);
+  if (choices.length < 2) {
+    alert('Trebate najmanje 2 mogućnosti!');
+    return;
+  }
+
+  if (correctIdx < 0 || correctIdx >= choices.length) {
+    alert('Redni broj točnog odgovora je nevažeći!');
+    return;
+  }
+
+  try {
+    const res = await fetch('/admin/create_multiple_choice_question', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question_text: question,
+        choices: choices,
+        correct_idx: correctIdx,
+        round: parseInt(round),
+        duration: duration
+      })
+    });
+
+    const data = await res.json();
+    if (data.status === 'ok') {
+      addSongToTableHTML(data.song);
+      const emptyMsg = document.querySelector('.table-container .text-center');
+      if (emptyMsg) emptyMsg.style.display = 'none';
+      const table = document.querySelector('.table-container .table');
+      if (table) table.classList.remove('d-none');
+
+      // Clear form
+      document.getElementById('multipleQuestion').value = '';
+      document.getElementById('multipleChoices').value = '';
+      document.getElementById('multipleCorrect').value = '1';
+      document.getElementById('questionType').value = '';
+      SETUP.showQuestionPanel('');
+
+      alert('Pitanje dodano!');
+    } else {
+      alert('Greška: ' + (data.msg || 'Neuspješno'));
+    }
+  } catch (e) {
+    console.error(e);
+    alert('Greška pri dodavanju pitanja');
+  }
+};
+
+SETUP.createVideoQuestion = async function() {
+  const filename = document.getElementById('videoFilename').value.trim();
+  const artist = document.getElementById('videoArtist').value.trim();
+  const title = document.getElementById('videoTitle').value.trim();
+  const start = parseFloat(document.getElementById('videoStart').value);
+  const duration = parseFloat(document.getElementById('videoDuration').value);
+  const round = document.getElementById('videoRound').value;
+
+  if (!filename) {
+    alert('Unesite naziv videa!');
+    return;
+  }
+
+  try {
+    const res = await fetch('/admin/create_video_question', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filename: filename,
+        artist: artist || '?',
+        title: title || '?',
+        start_time: start,
+        duration: duration,
+        round: parseInt(round)
+      })
+    });
+
+    const data = await res.json();
+    if (data.status === 'ok') {
+      addSongToTableHTML(data.song);
+      const emptyMsg = document.querySelector('.table-container .text-center');
+      if (emptyMsg) emptyMsg.style.display = 'none';
+      const table = document.querySelector('.table-container .table');
+      if (table) table.classList.remove('d-none');
+
+      // Clear form
+      document.getElementById('videoFilename').value = '';
+      document.getElementById('videoArtist').value = '';
+      document.getElementById('videoTitle').value = '';
+      document.getElementById('videoStart').value = '0';
+      document.getElementById('videoDuration').value = '30';
+      document.getElementById('questionType').value = '';
+      SETUP.showQuestionPanel('');
+
+      alert('Video pitanje dodano!');
+    } else {
+      alert('Greška: ' + (data.msg || 'Neuspješno'));
+    }
+  } catch (e) {
+    console.error(e);
+    alert('Greška pri dodavanju videa');
+  }
+};
+
+SETUP.createSimultaneousQuestion = async function() {
+  const filename = document.getElementById('simultaneousFilename').value.trim();
+  const artist = document.getElementById('simultaneousArtist').value.trim();
+  const title = document.getElementById('simultaneousTitle').value.trim();
+  const extra = document.getElementById('simultaneousExtra').value.trim();
+  const extraAnswer = document.getElementById('simultaneousExtraAnswer').value.trim();
+  const start = parseFloat(document.getElementById('simultaneousStart').value);
+  const duration = parseFloat(document.getElementById('simultaneousDuration').value);
+  const round = document.getElementById('simultaneousRound').value;
+
+  if (!filename) {
+    alert('Unesite naziv glazbe!');
+    return;
+  }
+
+  if (extra && !extraAnswer) {
+    alert('Unesite tocan odgovor za dodatno pitanje!');
+    return;
+  }
+
+  try {
+    const res = await fetch('/admin/create_simultaneous_question', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filename: filename,
+        artist: artist || '?',
+        title: title || '?',
+        extra_question: extra,
+        extra_answer: extraAnswer,
+        start_time: start,
+        duration: duration,
+        round: parseInt(round)
+      })
+    });
+
+    const data = await res.json();
+    if (data.status === 'ok') {
+      addSongToTableHTML(data.song);
+      const emptyMsg = document.querySelector('.table-container .text-center');
+      if (emptyMsg) emptyMsg.style.display = 'none';
+      const table = document.querySelector('.table-container .table');
+      if (table) table.classList.remove('d-none');
+
+      // Clear form
+      document.getElementById('simultaneousFilename').value = '';
+      document.getElementById('simultaneousArtist').value = '';
+      document.getElementById('simultaneousTitle').value = '';
+      document.getElementById('simultaneousExtra').value = '';
+      document.getElementById('simultaneousExtraAnswer').value = '';
+      document.getElementById('simultaneousStart').value = '0';
+      document.getElementById('simultaneousDuration').value = '30';
+      document.getElementById('questionType').value = '';
+      SETUP.showQuestionPanel('');
+
+      alert('Simultano pitanje dodano!');
+    } else {
+      alert('Greška: ' + (data.msg || 'Neuspješno'));
+    }
+  } catch (e) {
+    console.error(e);
+    alert('Greška pri dodavanju pitanja');
+  }
+};

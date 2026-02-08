@@ -1,6 +1,7 @@
 from app import create_app
 from extensions import db
 from musicquiz.models.quiz import Quiz
+from musicquiz.models.question import Question
 from musicquiz.models.song import Song
 from musicquiz.models.player import Player
 
@@ -24,20 +25,29 @@ with app.app_context():
 
     db.session.commit()
 
-    # Create a test song
-    s = Song.query.filter_by(title='Test Song').first()
-    if not s:
-        s = Song(
+    # Create a test question (audio)
+    existing = Question.query.filter_by(quiz_id=q.id).first()
+    if not existing:
+        question = Question(
             quiz_id=q.id,
-            type='standard',
-            filename=None,
+            type='audio',
+            round_number=1,
+            position=1,
+            duration=8.0
+        )
+        db.session.add(question)
+        db.session.flush()
+
+        song = Song(
+            question_id=question.id,
+            filename='test.mp3',
             artist='CorrectArtist',
             title='CorrectTitle',
-            start_time=0.0,
-            duration=8.0,
-            round_number=1
+            start_time=0.0
         )
-        db.session.add(s)
+        db.session.add(song)
         db.session.commit()
+    else:
+        question = existing
 
-    print('DB initialized. Quiz id:', q.id, 'Song id:', s.id)
+    print('DB initialized. Quiz id:', q.id, 'Question id:', question.id)

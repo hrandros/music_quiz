@@ -1,12 +1,13 @@
 import time
 import socketio
 
-SERVER = 'http://localhost:5001'
+SERVER = 'http://127.0.0.1:5000'
+CONNECT_TIMEOUT = 5
 
 # create three clients
-admin = socketio.Client()
-screen = socketio.Client()
-player = socketio.Client()
+admin = socketio.Client(logger=True, engineio_logger=True)
+screen = socketio.Client(logger=True, engineio_logger=True)
+player = socketio.Client(logger=True, engineio_logger=True)
 
 @screen.event
 def connect():
@@ -30,19 +31,19 @@ def connect():
 
 @player.on('player_unlock_input')
 def on_unlock(d):
-    print('[PLAYER] unlocked for song', d)
+    print('[PLAYER] unlocked for question', d)
     # submit an answer after a short delay
     time.sleep(1)
     player.emit('player_submit_answer', {
         'player_name': 'TeamA',
-        'song_id': d.get('song_id'),
+        'question_id': d.get('question_id'),
         'artist': 'CorrectArtist',
         'title': 'WrongTitle'
     })
     # second player
     player.emit('player_submit_answer', {
         'player_name': 'TeamB',
-        'song_id': d.get('song_id'),
+        'question_id': d.get('question_id'),
         'artist': 'WrongArtist',
         'title': 'CorrectTitle'
     })
@@ -56,39 +57,53 @@ def connect():
     print('[ADMIN] connected')
 
 
+@admin.event
+def connect_error(data):
+    print('[ADMIN] connect_error', data)
+
+
+@screen.event
+def connect_error(data):
+    print('[SCREEN] connect_error', data)
+
+
+@player.event
+def connect_error(data):
+    print('[PLAYER] connect_error', data)
+
+
+def connect_client(name, client):
+    try:
+        client.connect(SERVER, wait=True, wait_timeout=CONNECT_TIMEOUT)
+        print(f'{name} connected')
+    except Exception as e:
+        print(f'{name} connect error', e)
+
+
 def run():
     print('Connecting clients...')
-    try:
-        screen.connect(SERVER)
-        print('screen connected')
-    except Exception as e:
-        print('screen connect error', e)
-    try:
-        player.connect(SERVER)
-        print('player connected')
-    except Exception as e:
-        print('player connect error', e)
-    try:
-        admin.connect(SERVER)
-        print('admin connected')
-    except Exception as e:
-        print('admin connect error', e)
+    connect_client('screen', screen)
+    connect_client('player', player)
+    connect_client('admin', admin)
 
     time.sleep(1)
 
-    # find song id via a quick REST call? Instead, request server for songs isn't available.
+    # find question id via a quick REST call? Instead, request server for questions isn't available.
     # Hardcode id assuming setup_db printed it; use 1 as common case.
-    song_id = None
+    question_id = None
     try:
         # try to fetch via simple socket request to admin_get_players (dummy) then read db not possible
         pass
     except Exception:
         pass
 
-    # fallback: request admin to play seeded song id 3 (created by setup_db)
-    song_id = 3
-    print(f'Admin emitting admin_play_song for id={song_id}')
-    admin.emit('admin_play_song', {'id': song_id})
+    # fallback: request admin to play seeded question id 3 (created by setup_db)
+    question_id = 3
+    print(f'Admin emitting admin_play_song for id={question_id}')
+    if admin.connected:
+        admin.emit('admin_play_song', {'id': question_id})
+    else:
+        print('Admin client not connected. Skipping admin_play_song emit.')
 
     # wait long enough for timer, grading and finalization
     time.sleep(20)
