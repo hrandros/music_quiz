@@ -28,5 +28,8 @@ if __name__ == "__main__":
     app = create_app()
     import socket
     ip = socket.gethostbyname(socket.gethostname())
-    print(f"ROCK QUIZ READY ON http://{ip}:5000")
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
+    host = os.getenv("MQ_HOST", "0.0.0.0")
+    port = int(os.getenv("MQ_PORT", "5000"))
+    debug = os.getenv("MQ_DEBUG", "0").lower() in {"1", "true", "yes"}
+    print(f"ROCK QUIZ READY ON http://{ip}:{port}")
+    socketio.run(app, host=host, port=port, debug=debug)
