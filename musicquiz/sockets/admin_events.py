@@ -367,14 +367,13 @@ def auto_quiz_sequence_with_countdown(question_id, round_num, app, socketio_inst
 # --- SOCKET EVENTS ---
 
 def register_admin_events(socketio):
-    
     @socketio.on("admin_start_auto_run")
     def handle_auto_run(data):
-        if request.sid not in live_armed_clients:
-            emit("admin_live_guard_blocked", {
-                "message": "Live control nije aktiviran. Ukljuci prekidac prije pokretanja."
-            })
-            return
+        emit("admin_auto_run_ack", {
+            "status": "ok",
+            "round": data.get("round", 1),
+            "id": data.get("id")
+        })
         app = current_app._get_current_object()
         round_num = data.get("round", 1)
         quiz_settings["quiz_started"] = True
@@ -393,11 +392,6 @@ def register_admin_events(socketio):
 
     @socketio.on("admin_play_song")
     def handle_single_play(data):
-        if request.sid not in live_armed_clients:
-            emit("admin_live_guard_blocked", {
-                "message": "Live control nije aktiviran. Ukljuci prekidac prije pokretanja."
-            })
-            return
         question = Question.query.get(data["id"])
         if not question:
             return
@@ -436,8 +430,6 @@ def register_admin_events(socketio):
         new_pause_state = data.get("paused", False)
         quiz_settings["quiz_paused"] = new_pause_state
 
-        print(f"Quiz pause state changed to: {new_pause_state}")
-
         # Obavijesti sve (Admina, TV, Igrače) da je kviz pauziran/nastavljen
         socketio.emit("quiz_pause_state", {
             "paused": quiz_settings["quiz_paused"],
@@ -456,6 +448,7 @@ def register_admin_events(socketio):
             live_armed_clients.add(request.sid)
         else:
             live_armed_clients.discard(request.sid)
+        emit("admin_live_arm_ack", {"armed": armed})
 
     @socketio.on("disconnect")
     def handle_disconnect():

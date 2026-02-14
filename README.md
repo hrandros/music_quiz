@@ -34,7 +34,6 @@ python build_desktop.py
 ```
 
 ## Screenshots
-Add images to a `docs/` folder and update the links below.
 
 ![Local Launcher](docs/local_launcher.png)
 ![Web Setup](docs/web-setup.png)
@@ -43,7 +42,7 @@ Add images to a `docs/` folder and update the links below.
 ![Web Player](docs/web-player.png)
 ![Admin Setup](docs/admin-setup.png)
 ![Live View](docs/live-view.png)
-![Question Editor](docs/question-editor.png)
+
 
 ## Usage Steps
 1. Run the admin app: `python local_launcher.py`.

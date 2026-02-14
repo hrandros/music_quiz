@@ -24,6 +24,14 @@ class UiSignals(QtCore.QObject):
     leaderboard = QtCore.Signal(dict)
     grading = QtCore.Signal(list)
     pause_state = QtCore.Signal(bool)
+    round_countdown = QtCore.Signal(dict)
+    play_audio = QtCore.Signal(dict)
+    timer_update = QtCore.Signal(dict)
+    tv_start_timer = QtCore.Signal(dict)
+    show_correct = QtCore.Signal(dict)
+    round_finished = QtCore.Signal(dict)
+    single_player_update = QtCore.Signal(dict)
+    live_guard_blocked = QtCore.Signal(dict)
 
 
 class WaveformWidget(QtWidgets.QWidget):

@@ -8,3 +8,4 @@ from .simultaneous import SimultaneousQuestion
 from .player import Player
 from .answer import Answer
 from .player_quiz import PlayerQuiz
+from .log_entry import LogEntry
