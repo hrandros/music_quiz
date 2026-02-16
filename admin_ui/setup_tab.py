@@ -1,7 +1,7 @@
 import os
 import re
 
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from admin_ui.dialogs import (
     AudioQuestionEditorDialog,
@@ -44,6 +44,26 @@ class _RepoScanWorker(QtCore.QObject):
 
 
 class SetupTabMixin:
+    def _graphics_path(self, name):
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        return os.path.join(base_dir, "assets", "graphics", name)
+
+    def _add_panel_header(self, layout, title, icon_name):
+        row = QtWidgets.QHBoxLayout()
+        icon = QtWidgets.QLabel()
+        icon.setObjectName("PanelIcon")
+        icon_path = self._graphics_path(icon_name)
+        if os.path.exists(icon_path):
+            pixmap = QtGui.QPixmap(icon_path)
+            icon.setPixmap(pixmap.scaledToHeight(18, QtCore.Qt.SmoothTransformation))
+        label = QtWidgets.QLabel(title)
+        label.setObjectName("PanelTitle")
+        row.addWidget(icon)
+        row.addSpacing(6)
+        row.addWidget(label)
+        row.addStretch(1)
+        layout.addLayout(row)
+
     def _build_setup_tab(self):
         layout = QtWidgets.QVBoxLayout(self.tab_setup)
         top_bar = QtWidgets.QHBoxLayout()
@@ -98,8 +118,11 @@ class SetupTabMixin:
         self._build_questions_panel(right)
 
     def _build_repo_panel(self):
-        group = QtWidgets.QGroupBox("LOKALNI REPOZITORIJ")
+        group = QtWidgets.QGroupBox()
+        group.setProperty("panel", True)
+        group.setProperty("watermark", "guitar")
         group_layout = QtWidgets.QVBoxLayout(group)
+        self._add_panel_header(group_layout, "LOKALNI REPOZITORIJ", "rock_guitar.svg")
 
         path_row = QtWidgets.QHBoxLayout()
         self.repo_path = QtWidgets.QLineEdit()
@@ -146,8 +169,11 @@ class SetupTabMixin:
         return group
 
     def _build_create_panel(self):
-        group = QtWidgets.QGroupBox("KREIRAJ PITANJA")
+        group = QtWidgets.QGroupBox()
+        group.setProperty("panel", True)
+        group.setProperty("watermark", "skull")
         layout = QtWidgets.QVBoxLayout(group)
+        self._add_panel_header(layout, "KREIRAJ PITANJA", "rock_skull.svg")
 
         type_row = QtWidgets.QHBoxLayout()
         type_row.addWidget(QtWidgets.QLabel("Tip pitanja"))
@@ -292,8 +318,11 @@ class SetupTabMixin:
         return widget
 
     def _build_questions_panel(self, parent_layout):
-        group = QtWidgets.QGroupBox("PITANJA U KVIZU")
+        group = QtWidgets.QGroupBox()
+        group.setProperty("panel", True)
+        group.setProperty("watermark", "list")
         layout = QtWidgets.QVBoxLayout(group)
+        self._add_panel_header(layout, "PITANJA U KVIZU", "rock_list.svg")
         header = QtWidgets.QHBoxLayout()
         header.addWidget(QtWidgets.QLabel("Round:"))
         self.round_combo = QtWidgets.QComboBox()

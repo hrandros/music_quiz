@@ -102,6 +102,7 @@ class AdminLauncher(QtWidgets.QMainWindow, SetupTabMixin, LiveTabMixin, Database
         self.setMinimumHeight(700)
 
         root = QtWidgets.QWidget()
+        root.setObjectName("Root")
         root_layout = QtWidgets.QHBoxLayout(root)
         root_layout.setContentsMargins(12, 12, 12, 12)
         root_layout.setSpacing(12)
@@ -113,13 +114,38 @@ class AdminLauncher(QtWidgets.QMainWindow, SetupTabMixin, LiveTabMixin, Database
         sidebar_layout.setContentsMargins(12, 12, 12, 12)
         sidebar_layout.setSpacing(10)
 
-        logo = QtWidgets.QLabel("ROCK QUIZ")
-        logo.setObjectName("SidebarLogo")
-        sidebar_layout.addWidget(logo)
+        side_logo_row = QtWidgets.QHBoxLayout()
+        side_logo_icon = QtWidgets.QLabel()
+        side_logo_icon.setObjectName("SidebarLogoIcon")
+        logo_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "assets", "graphics", "rock_logo.svg"
+        )
+        if os.path.exists(logo_path):
+            icon = QtGui.QPixmap(logo_path)
+            side_logo_icon.setPixmap(icon.scaledToHeight(18, QtCore.Qt.SmoothTransformation))
+        side_logo_text = QtWidgets.QLabel("ROCKQUIZ")
+        side_logo_text.setObjectName("SidebarLogo")
+        side_logo_row.addWidget(side_logo_icon)
+        side_logo_row.addSpacing(6)
+        side_logo_row.addWidget(side_logo_text)
+        side_logo_row.addStretch(1)
+        sidebar_layout.addLayout(side_logo_row)
 
         self.nav_list = QtWidgets.QListWidget()
         self.nav_list.setObjectName("NavList")
-        self.nav_list.addItems(["Setup", "Live", "Database"])
+        nav_items = [
+            ("Setup", "rock_guitar.svg"),
+            ("Live", "rock_live.svg"),
+            ("Database", "rock_db.svg"),
+        ]
+        for label, icon_name in nav_items:
+            item = QtWidgets.QListWidgetItem(label)
+            icon_path = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)), "assets", "graphics", icon_name
+            )
+            if os.path.exists(icon_path):
+                item.setIcon(QtGui.QIcon(icon_path))
+            self.nav_list.addItem(item)
         self.nav_list.setCurrentRow(0)
         sidebar_layout.addWidget(self.nav_list, 1)
 
@@ -139,9 +165,28 @@ class AdminLauncher(QtWidgets.QMainWindow, SetupTabMixin, LiveTabMixin, Database
         root_layout.addWidget(sidebar)
 
         content = QtWidgets.QWidget()
+        content.setObjectName("Content")
         content_layout = QtWidgets.QVBoxLayout(content)
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(12)
+
+        top_bar = QtWidgets.QFrame()
+        top_bar.setObjectName("TopBar")
+        top_layout = QtWidgets.QHBoxLayout(top_bar)
+        top_layout.setContentsMargins(12, 10, 12, 10)
+        top_layout.setSpacing(10)
+
+        top_logo = QtWidgets.QLabel()
+        top_logo.setObjectName("TopBarLogo")
+        if os.path.exists(logo_path):
+            pixmap = QtGui.QPixmap(logo_path)
+            top_logo.setPixmap(pixmap.scaledToHeight(22, QtCore.Qt.SmoothTransformation))
+        top_title = QtWidgets.QLabel("ROCKQUIZ")
+        top_title.setObjectName("TopBarTitle")
+        top_layout.addWidget(top_logo)
+        top_layout.addWidget(top_title)
+        top_layout.addStretch(1)
+        content_layout.addWidget(top_bar)
 
         self.page_stack = QtWidgets.QStackedWidget()
         content_layout.addWidget(self.page_stack, 1)
@@ -158,12 +203,47 @@ class AdminLauncher(QtWidgets.QMainWindow, SetupTabMixin, LiveTabMixin, Database
         self._build_live_tab()
         self._build_database_tab()
 
-        self.nav_list.currentRowChanged.connect(self.page_stack.setCurrentIndex)
+        self.nav_list.currentRowChanged.connect(self._switch_page)
 
         self.setCentralWidget(root)
+        self._install_shadow_effects()
 
     def _apply_styles(self):
         self.setStyleSheet(build_styles(THEME))
+
+    def _switch_page(self, index):
+        if index == self.page_stack.currentIndex():
+            return
+        self.page_stack.setCurrentIndex(index)
+        self.page_stack.currentWidget().setGraphicsEffect(None)
+
+    def _fade_widget(self, widget):
+        if widget is None:
+            return
+        effect = widget.graphicsEffect()
+        if not isinstance(effect, QtWidgets.QGraphicsOpacityEffect):
+            effect = QtWidgets.QGraphicsOpacityEffect(widget)
+            widget.setGraphicsEffect(effect)
+        effect.setOpacity(0.0)
+        anim = QtCore.QPropertyAnimation(effect, b"opacity", widget)
+        anim.setDuration(220)
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+        anim.setEasingCurve(QtCore.QEasingCurve.OutCubic)
+        widget._fade_anim = anim
+        anim.start()
+
+    def _install_shadow_effects(self):
+        sidebar = self.findChild(QtWidgets.QFrame, "Sidebar")
+        if sidebar is not None:
+            self._apply_shadow(sidebar, blur=28, offset=6)
+
+    def _apply_shadow(self, widget, blur=24, offset=4):
+        effect = QtWidgets.QGraphicsDropShadowEffect(widget)
+        effect.setBlurRadius(blur)
+        effect.setOffset(0, offset)
+        effect.setColor(QtGui.QColor(0, 0, 0, 140))
+        widget.setGraphicsEffect(effect)
 
     def _prepare_dialog_animation(self, dialog):
         dialog.setWindowOpacity(0.0)
@@ -211,6 +291,7 @@ class AdminLauncher(QtWidgets.QMainWindow, SetupTabMixin, LiveTabMixin, Database
                 f"connected:{self.last_connect_url or 'unknown'}"
             ))
             self.refresh_live()
+            QtCore.QTimer.singleShot(0, self.unlock_registrations)
 
         @self.sio.event
         def disconnect():
@@ -398,6 +479,7 @@ class AdminLauncher(QtWidgets.QMainWindow, SetupTabMixin, LiveTabMixin, Database
             text=True
         )
         self.server_starting = True
+        self.registrations_open = False
         self.signals.status_text.emit("Running")
         self.signals.address_text.emit(self._format_address_link())
         self._sync_server_buttons(False)

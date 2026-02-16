@@ -2,6 +2,7 @@ import os
 
 from PySide6 import QtCore, QtGui, QtMultimedia, QtWidgets
 
+from admin_ui.constants import THEME
 from admin_ui.utils import ensure_videos_dir
 from config import Config
 from extensions import db
@@ -40,7 +41,7 @@ class _TimerRingWidget(QtWidgets.QWidget):
         margin = 8
         rect = QtCore.QRectF(margin, margin, size - 2 * margin, size - 2 * margin)
 
-        base_pen = QtGui.QPen(QtGui.QColor("#333"))
+        base_pen = QtGui.QPen(QtGui.QColor(THEME["border"]))
         base_pen.setWidth(6)
         painter.setPen(base_pen)
         painter.drawEllipse(rect)
@@ -48,13 +49,13 @@ class _TimerRingWidget(QtWidgets.QWidget):
         if self._remaining is not None and self._total:
             ratio = float(self._remaining) / float(self._total)
             progress = max(0.0, min(1.0, ratio if self._drain else (1.0 - ratio)))
-            arc_pen = QtGui.QPen(QtGui.QColor("#dc3545"))
+            arc_pen = QtGui.QPen(QtGui.QColor(THEME["primary"]))
             arc_pen.setWidth(6)
             arc_pen.setCapStyle(QtCore.Qt.RoundCap)
             painter.setPen(arc_pen)
             painter.drawArc(rect, 90 * 16, int(-progress * 360 * 16))
 
-        painter.setPen(QtGui.QColor("#ffffff"))
+        painter.setPen(QtGui.QColor(THEME["text"]))
         value_text = "--" if self._remaining is None else str(int(self._remaining))
         value_font = QtGui.QFont("Oswald", 12)
         value_font.setBold(True)
@@ -65,14 +66,47 @@ class _TimerRingWidget(QtWidgets.QWidget):
 
 
 class LiveTabMixin:
+    def _graphics_path(self, name):
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        return os.path.join(base_dir, "assets", "graphics", name)
+
+    def _add_panel_header(self, layout, title, icon_name):
+        row = QtWidgets.QHBoxLayout()
+        icon = QtWidgets.QLabel()
+        icon.setObjectName("PanelIcon")
+        icon_path = self._graphics_path(icon_name)
+        if os.path.exists(icon_path):
+            pixmap = QtGui.QPixmap(icon_path)
+            icon.setPixmap(pixmap.scaledToHeight(18, QtCore.Qt.SmoothTransformation))
+        label = QtWidgets.QLabel(title)
+        label.setObjectName("PanelTitle")
+        row.addWidget(icon)
+        row.addSpacing(6)
+        row.addWidget(label)
+        row.addStretch(1)
+        layout.addLayout(row)
+
     def _build_live_tab(self):
         layout = QtWidgets.QVBoxLayout(self.tab_live)
         top = QtWidgets.QHBoxLayout()
         layout.addLayout(top)
 
+        top_icon = QtWidgets.QLabel()
+        top_icon.setObjectName("PanelIcon")
+        top_icon_path = self._graphics_path("rock_live.svg")
+        if os.path.exists(top_icon_path):
+            pixmap = QtGui.QPixmap(top_icon_path)
+            top_icon.setPixmap(pixmap.scaledToHeight(18, QtCore.Qt.SmoothTransformation))
+        top_title = QtWidgets.QLabel("LIVE")
+        top_title.setObjectName("PanelTitle")
+        top.addWidget(top_icon)
+        top.addWidget(top_title)
+        top.addSpacing(8)
+
         top.addWidget(QtWidgets.QLabel("Status:"))
         self.live_status_label = QtWidgets.QLabel("Disconnected")
         self.live_status_label.setObjectName("StatusLabel")
+        self.live_status_label.setProperty("badge", "cyan")
         top.addWidget(self.live_status_label)
 
         top.addSpacing(12)
@@ -92,35 +126,31 @@ class LiveTabMixin:
         self.autoplay_btn.clicked.connect(self.start_autoplay)
         top.addWidget(self.autoplay_btn)
 
-        self.next_round_btn = QtWidgets.QPushButton("Next Round")
-        self.next_round_btn.setEnabled(False)
-        self.next_round_btn.clicked.connect(self.start_next_round)
-        top.addWidget(self.next_round_btn)
-
         self.pause_btn = QtWidgets.QPushButton("Pause")
         self.pause_btn.clicked.connect(self.toggle_pause)
         self.pause_btn.setEnabled(False)
         top.addWidget(self.pause_btn)
-
-        self.reg_btn = QtWidgets.QPushButton("Otkljucaj prijave")
-        self.reg_btn.clicked.connect(self.unlock_registrations)
-        top.addWidget(self.reg_btn)
 
         self.refresh_live_btn = QtWidgets.QPushButton("Refresh")
         self.refresh_live_btn.clicked.connect(self.refresh_live)
         top.addStretch(1)
         top.addWidget(self.refresh_live_btn)
 
-        now_group = QtWidgets.QGroupBox("Now Playing")
+        now_group = QtWidgets.QGroupBox()
+        now_group.setProperty("panel", True)
+        now_group.setProperty("watermark", "live")
         now_layout = QtWidgets.QHBoxLayout(now_group)
+        left_col = QtWidgets.QVBoxLayout()
+        self._add_panel_header(left_col, "NOW PLAYING", "rock_live.svg")
         self.now_question_label = QtWidgets.QLabel("Playing: --")
         self.now_question_label.setObjectName("SectionTitle")
         self.now_question_label.setWordWrap(True)
-        now_layout.addWidget(self.now_question_label)
+        left_col.addWidget(self.now_question_label)
         self.now_meta_label = QtWidgets.QLabel("Round: -- | Type: --")
         self.now_meta_label.setVisible(False)
         self.live_event_label = QtWidgets.QLabel("Last event: --")
         self.live_event_label.setVisible(False)
+        now_layout.addLayout(left_col, 1)
         now_layout.addStretch(1)
         self.timer_ring = _TimerRingWidget()
         now_layout.addWidget(self.timer_ring)
@@ -134,14 +164,18 @@ class LiveTabMixin:
 
         self.server_status_label = QtWidgets.QLabel("Stopped")
         self.server_status_label.setObjectName("StatusLabel")
+        self.server_status_label.setProperty("badge", "red")
         self.server_status_label.setVisible(False)
         self.port_input.valueChanged.connect(self.update_address)
         self.log_box = QtWidgets.QPlainTextEdit()
         self.log_box.setReadOnly(True)
         self.log_box.setVisible(False)
 
-        grading_group = QtWidgets.QGroupBox("Grading")
+        grading_group = QtWidgets.QGroupBox()
+        grading_group.setProperty("panel", True)
+        grading_group.setProperty("watermark", "list")
         grading_layout = QtWidgets.QVBoxLayout(grading_group)
+        self._add_panel_header(grading_layout, "ODGOVORI UZIVO", "rock_list.svg")
 
         filter_row = QtWidgets.QHBoxLayout()
         self.filter_player = QtWidgets.QLineEdit()
@@ -182,9 +216,11 @@ class LiveTabMixin:
         self.grading_table.setColumnWidth(1, 35)
         self.grading_table.setColumnWidth(2, 35)
         self.grading_table.horizontalHeader().setStretchLastSection(True)
+        self.grading_table.verticalHeader().setVisible(False)
         self.grading_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.grading_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.grading_table.setShowGrid(False)
+        self.grading_table.setAlternatingRowColors(True)
         self.grading_table.setColumnHidden(0, True)
         grading_layout.addWidget(self.grading_table)
 
@@ -205,21 +241,36 @@ class LiveTabMixin:
         grading_layout.addLayout(score_row)
 
         right = QtWidgets.QWidget()
-        right_layout = QtWidgets.QVBoxLayout(right)
-        right_layout.addWidget(QtWidgets.QLabel("Players"))
+        right_layout = QtWidgets.QHBoxLayout(right)
+
+        players_group = QtWidgets.QGroupBox()
+        players_group.setProperty("panel", True)
+        players_group.setProperty("watermark", "users")
+        players_layout = QtWidgets.QVBoxLayout(players_group)
+        self._add_panel_header(players_layout, "TIMOVI", "rock_users.svg")
         self.players_table = QtWidgets.QTableWidget(0, 4)
         self.players_table.setHorizontalHeaderLabels(["Status", "Player", "Score", "Lock"])
         self.players_table.setColumnWidth(0, 70)
         self.players_table.setColumnWidth(2, 70)
         self.players_table.horizontalHeader().setStretchLastSection(True)
+        self.players_table.verticalHeader().setVisible(False)
         self.players_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.players_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
-        right_layout.addWidget(self.players_table)
-        right_layout.addWidget(QtWidgets.QLabel("Playlist"))
+        self.players_table.setAlternatingRowColors(True)
+        players_layout.addWidget(self.players_table, 1)
+
+        playlist_group = QtWidgets.QGroupBox()
+        playlist_group.setProperty("panel", True)
+        playlist_group.setProperty("watermark", "list")
+        playlist_layout = QtWidgets.QVBoxLayout(playlist_group)
+        self._add_panel_header(playlist_layout, "PITANJA U RUNDI", "rock_list.svg")
         self.live_questions_list = QtWidgets.QListWidget()
         self.live_questions_list.setObjectName("LiveQuestionList")
         self.live_questions_list.setSpacing(6)
-        right_layout.addWidget(self.live_questions_list, 1)
+        playlist_layout.addWidget(self.live_questions_list, 1)
+
+        right_layout.addWidget(players_group, 1)
+        right_layout.addWidget(playlist_group, 1)
 
         split = QtWidgets.QSplitter()
         split.addWidget(grading_group)
@@ -341,8 +392,6 @@ class LiveTabMixin:
             return
         self.sio.emit("admin_toggle_registrations", {"open": True})
         self.registrations_open = True
-        self.reg_btn.setEnabled(False)
-        self.reg_btn.setText("Prijave otvorene")
 
     def update_pause_button(self, paused):
         self.is_paused = paused
@@ -352,18 +401,6 @@ class LiveTabMixin:
     def update_live_status(self, text):
         self.live_status_label.setText(text)
         self._set_last_event(f"status: {text}")
-
-    def start_next_round(self):
-        if not self.sio_connected:
-            return
-        if not self.next_round_ready:
-            return
-        next_round = int(self.live_round.currentText()) + 1
-        if next_round > 5:
-            QtWidgets.QMessageBox.information(self, "Live", "Nema sljedece runde.")
-            return
-        self.live_round.setCurrentIndex(next_round - 1)
-        self.start_autoplay()
 
     def start_countdown(self, seconds, round_num):
         self.countdown_total = max(1, int(seconds))
@@ -398,7 +435,6 @@ class LiveTabMixin:
             self._clear_timer_display()
 
     def update_autoplay_buttons(self):
-        self.next_round_btn.setEnabled(self.next_round_ready and self.sio_connected)
         self.autoplay_btn.setEnabled(self.sio_connected)
         self.autoplay_btn.setText("Start Autoplay")
 

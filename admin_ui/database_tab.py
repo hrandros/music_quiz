@@ -1,4 +1,6 @@
-from PySide6 import QtCore, QtWidgets
+import os
+
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from musicquiz.models import (
     Answer,
@@ -16,8 +18,28 @@ from musicquiz.models import (
 
 
 class DatabaseTabMixin:
+    def _graphics_path(self, name):
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        return os.path.join(base_dir, "assets", "graphics", name)
+
     def _build_database_tab(self):
         layout = QtWidgets.QVBoxLayout(self.tab_database)
+        self.tab_database.setProperty("watermark", "db")
+
+        title_row = QtWidgets.QHBoxLayout()
+        title_icon = QtWidgets.QLabel()
+        title_icon.setObjectName("PanelIcon")
+        icon_path = self._graphics_path("rock_db.svg")
+        if os.path.exists(icon_path):
+            pixmap = QtGui.QPixmap(icon_path)
+            title_icon.setPixmap(pixmap.scaledToHeight(18, QtCore.Qt.SmoothTransformation))
+        title_label = QtWidgets.QLabel("DATABASE")
+        title_label.setObjectName("PanelTitle")
+        title_row.addWidget(title_icon)
+        title_row.addSpacing(6)
+        title_row.addWidget(title_label)
+        title_row.addStretch(1)
+        layout.addLayout(title_row)
 
         header = QtWidgets.QHBoxLayout()
         layout.addLayout(header)
@@ -42,6 +64,7 @@ class DatabaseTabMixin:
 
         self.db_info_label = QtWidgets.QLabel("Rows: 0")
         self.db_info_label.setObjectName("StatusLabel")
+        self.db_info_label.setProperty("badge", "yellow")
         header.addWidget(self.db_info_label)
 
         filter_row = QtWidgets.QHBoxLayout()
@@ -68,10 +91,12 @@ class DatabaseTabMixin:
         self.db_table.horizontalHeader().setStretchLastSection(True)
         self.db_table.horizontalHeader().setSortIndicatorShown(True)
         self.db_table.horizontalHeader().setSectionsClickable(True)
+        self.db_table.verticalHeader().setVisible(False)
         self.db_table.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.db_table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.db_table.setWordWrap(False)
         self.db_table.setSortingEnabled(True)
+        self.db_table.setAlternatingRowColors(True)
         layout.addWidget(self.db_table, 1)
 
         self._db_models = {
