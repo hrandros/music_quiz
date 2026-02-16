@@ -3,7 +3,6 @@ import os
 import random
 import re
 import sys
-from datetime import datetime
 from urllib.parse import quote
 
 import qrcode
@@ -21,19 +20,28 @@ class CreateQuizDialog(QtWidgets.QDialog):
         super().__init__(parent)
         self._with_app = with_app
         self._on_created = on_created
+        self._hr_locale = QtCore.QLocale(QtCore.QLocale.Croatian, QtCore.QLocale.Croatia)
         self.setWindowTitle("Novi kviz")
         layout = QtWidgets.QFormLayout(self)
         self._title_input = QtWidgets.QLineEdit()
-        self._date_input = QtWidgets.QLineEdit()
+        self._date_input = QtWidgets.QDateEdit()
+        self._date_input.setCalendarPopup(True)
+        self._date_input.setDisplayFormat("dd.MM.yyyy")
+        self._date_input.setLocale(self._hr_locale)
+        self._date_input.setDate(QtCore.QDate.currentDate())
+        calendar = self._date_input.calendarWidget()
+        if calendar:
+            calendar.setLocale(self._hr_locale)
+            calendar.setFirstDayOfWeek(QtCore.Qt.DayOfWeek.Monday)
         layout.addRow("Naziv kviza", self._title_input)
-        layout.addRow("Datum (YYYY-MM-DD)", self._date_input)
+        layout.addRow("Datum", self._date_input)
         self._buttons = QtWidgets.QDialogButtonBox(
             QtWidgets.QDialogButtonBox.Save | QtWidgets.QDialogButtonBox.Cancel
         )
         self._buttons.button(QtWidgets.QDialogButtonBox.Save).setText("Spremi")
         self._buttons.button(QtWidgets.QDialogButtonBox.Cancel).setText("Odustani")
         self._buttons.accepted.connect(self._save)
-        self._buttons.rejected.connect(self._cancel)
+        self._buttons.rejected.connect(self.reject)
         layout.addRow(self._buttons)
         if prepare_animation:
             prepare_animation(self)
@@ -43,14 +51,8 @@ class CreateQuizDialog(QtWidgets.QDialog):
         if not title:
             QtWidgets.QMessageBox.warning(self, "Kviz", "Unesi naziv kviza.")
             return
-        date_raw = self._date_input.text().strip()
-        event_date = None
-        if date_raw:
-            try:
-                event_date = datetime.strptime(date_raw, "%Y-%m-%d").date()
-            except ValueError:
-                QtWidgets.QMessageBox.warning(self, "Kviz", "Datum mora biti YYYY-MM-DD.")
-                return
+        selected_date = self._date_input.date()
+        event_date = selected_date.toPython() if selected_date and selected_date.isValid() else None
 
         def _create():
             from musicquiz.models import Quiz

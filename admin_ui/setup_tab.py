@@ -49,26 +49,15 @@ class SetupTabMixin:
         top_bar = QtWidgets.QHBoxLayout()
         layout.addLayout(top_bar)
 
-        title = QtWidgets.QLabel("SETUP")
-        title.setObjectName("SectionTitle")
-        top_bar.addWidget(title)
-
-        top_bar.addSpacing(12)
         top_bar.addWidget(QtWidgets.QLabel("ACTIVE:"))
 
         self.quiz_combo = QtWidgets.QComboBox()
         self.quiz_combo.currentIndexChanged.connect(self.refresh_questions)
         top_bar.addWidget(self.quiz_combo)
 
-        actions_btn = QtWidgets.QToolButton()
-        actions_btn.setText("Actions")
-        actions_btn.setPopupMode(QtWidgets.QToolButton.InstantPopup)
-        actions_menu = QtWidgets.QMenu(actions_btn)
-        actions_menu.addAction("Set Active", self.set_active_quiz)
-        actions_menu.addAction("New Quiz", self.create_quiz_modal)
-        actions_menu.addAction("Refresh", self.refresh_questions)
-        actions_btn.setMenu(actions_menu)
-        top_bar.addWidget(actions_btn)
+        new_quiz_btn = QtWidgets.QPushButton("New Quiz")
+        new_quiz_btn.clicked.connect(self.create_quiz_modal)
+        top_bar.addWidget(new_quiz_btn)
 
         top_bar.addStretch(1)
 
@@ -84,13 +73,16 @@ class SetupTabMixin:
         toggle_row.addWidget(QtWidgets.QLabel("Pitanje:"))
         self.question_mode_audio = QtWidgets.QPushButton("Audio")
         self.question_mode_audio.setCheckable(True)
+        self.question_mode_audio.setProperty("modeToggle", True)
         self.question_mode_other = QtWidgets.QPushButton("Ostalo")
         self.question_mode_other.setCheckable(True)
+        self.question_mode_other.setProperty("modeToggle", True)
         self.question_mode_group = QtWidgets.QButtonGroup(self)
         self.question_mode_group.setExclusive(True)
         self.question_mode_group.addButton(self.question_mode_audio, 0)
         self.question_mode_group.addButton(self.question_mode_other, 1)
         self.question_mode_audio.setChecked(True)
+        self._update_question_mode_buttons()
         toggle_row.addWidget(self.question_mode_audio)
         toggle_row.addWidget(self.question_mode_other)
         toggle_row.addStretch(1)
@@ -183,6 +175,18 @@ class SetupTabMixin:
     def _on_question_mode_changed(self, mode_id):
         if hasattr(self, "create_mode_stack"):
             self.create_mode_stack.setCurrentIndex(mode_id)
+        self._update_question_mode_buttons()
+
+    def _update_question_mode_buttons(self):
+        if not hasattr(self, "question_mode_audio") or not hasattr(self, "question_mode_other"):
+            return
+        audio_selected = self.question_mode_audio.isChecked()
+        self.question_mode_audio.setProperty("inactive", not audio_selected)
+        self.question_mode_other.setProperty("inactive", audio_selected)
+        for button in (self.question_mode_audio, self.question_mode_other):
+            button.style().unpolish(button)
+            button.style().polish(button)
+            button.update()
 
     def _create_text_panel(self):
         widget = QtWidgets.QWidget()
@@ -420,13 +424,6 @@ class SetupTabMixin:
             self.questions_list.addItem(item)
             self.questions_list.setItemWidget(item, widget)
 
-    def set_active_quiz(self):
-        quiz_id = self._get_active_quiz_id()
-        if not quiz_id:
-            return
-
-        self.set_active_quiz_by_id(quiz_id)
-
     def set_active_quiz_by_id(self, quiz_id):
         if not quiz_id:
             return
@@ -459,10 +456,6 @@ class SetupTabMixin:
         if path:
             self.repo_path.setText(path)
             self._start_repo_scan(path)
-
-    def scan_repo_folder(self):
-        base = self.repo_path.text().strip()
-        self._start_repo_scan(base)
 
     def _start_repo_scan(self, base):
         if not base or not os.path.isdir(base):
@@ -962,14 +955,6 @@ class SetupTabMixin:
             prepare_animation=self._prepare_dialog_animation,
         )
         dialog.exec()
-
-    def delete_selected_question(self):
-        qid = self.selected_question_id()
-        self.delete_question_by_id(qid)
-
-    def move_question(self, direction):
-        qid = self.selected_question_id()
-        self.move_question_by_id(qid, direction)
 
     def _on_questions_changed(self):
         self._load_quizzes()

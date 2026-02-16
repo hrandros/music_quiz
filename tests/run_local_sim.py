@@ -10,7 +10,7 @@ screen = socketio.Client(logger=True, engineio_logger=True)
 player = socketio.Client(logger=True, engineio_logger=True)
 
 @screen.event
-def connect():
+def connect_screen():
     print('[SCREEN] connected')
 
 @screen.on('tv_start_timer')
@@ -26,7 +26,7 @@ def on_lb(d):
     print('[SCREEN] leaderboard', d)
 
 @player.event
-def connect():
+def connect_player():
     print('[PLAYER] connected')
 
 @player.on('player_unlock_input')
@@ -53,22 +53,22 @@ def on_lock():
     print('[PLAYER] locked')
 
 @admin.event
-def connect():
+def connect_admin():
     print('[ADMIN] connected')
 
 
 @admin.event
-def connect_error(data):
+def connect_error_admin(data):
     print('[ADMIN] connect_error', data)
 
 
 @screen.event
-def connect_error(data):
+def connect_error_screen(data):
     print('[SCREEN] connect_error', data)
 
 
 @player.event
-def connect_error(data):
+def connect_error_player(data):
     print('[PLAYER] connect_error', data)
 
 

@@ -1,6 +1,6 @@
 from extensions import db, socketio
 from flask_socketio import emit
-from flask import current_app, request, url_for
+from flask import current_app, request
 from musicquiz.models import Player, Question, Answer
 from musicquiz.services.quiz_service import get_active_quiz
 from musicquiz.services.player_status import get_all_players_data

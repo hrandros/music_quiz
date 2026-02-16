@@ -586,6 +586,17 @@ class LiveTabMixin:
             self.with_app(_update)
 
     def apply_grading_filter(self):
+        def _format_points(value):
+            try:
+                num = float(value)
+            except (TypeError, ValueError):
+                num = 0.0
+            return f"{num:g}"
+
+        def _guess_with_points(guess, points):
+            text = str(guess or "")
+            return f"{text} ({_format_points(points)})".strip()
+
         filters = {
             "player": self.filter_player.text().strip().lower(),
             "round": self.filter_round.text().strip().lower(),
@@ -619,8 +630,8 @@ class LiveTabMixin:
                 row.get("round_number"),
                 row.get("position"),
                 row.get("player_name"),
-                row.get("artist_guess"),
-                row.get("title_guess"),
+                _guess_with_points(row.get("artist_guess"), row.get("artist_points")),
+                _guess_with_points(row.get("title_guess"), row.get("title_points")),
             ]
             table_row = self.grading_table.rowCount()
             self.grading_table.insertRow(table_row)
@@ -744,7 +755,6 @@ class LiveTabMixin:
             self._store_log("socket", f"update_now_playing:id={data.get('id')} type={data.get('question_type')}")
         idx = data.get("question_index") or data.get("id") or ""
         qtype = data.get("question_type") or "audio"
-        round_num = data.get("round") or ""
 
         if qtype in ["text", "text_multiple"]:
             text = data.get("question_text") or "Pitanje"

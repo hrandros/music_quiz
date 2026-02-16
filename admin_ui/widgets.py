@@ -301,7 +301,6 @@ class WaveformWidget(QtWidgets.QWidget):
         window = max(1, int(count / self._zoom))
         window = min(window, count)
         progress_ratio = min(1.0, self._progress_ms / max(1, self._duration_ms))
-        window_ratio = window / max(1, count)
         if self._zoom > 1.0:
             if self._view_center_ratio is None:
                 self._view_center_ratio = progress_ratio
@@ -435,7 +434,6 @@ class WaveformWidget(QtWidgets.QWidget):
         if delta == 0:
             super().wheelEvent(event)
             return
-        width = max(1, self.rect().width())
         count = max(1, len(self._peaks))
         window = max(1, int(count / self._zoom))
         window_ratio = window / max(1, count)

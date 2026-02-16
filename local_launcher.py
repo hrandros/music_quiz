@@ -7,8 +7,8 @@ import socketio
 from PySide6 import QtCore, QtGui, QtMultimedia, QtWidgets
 
 from admin_ui.constants import APP_HOST, APP_PORT, THEME
+from admin_ui.database_tab import DatabaseTabMixin
 from admin_ui.live_tab import LiveTabMixin
-from admin_ui.logs_tab import LogsTabMixin
 from admin_ui.setup_tab import SetupTabMixin
 from admin_ui.styles import build_styles
 from admin_ui.utils import get_local_ip
@@ -18,7 +18,7 @@ from extensions import db
 from musicquiz.models import LogEntry
 
 
-class AdminLauncher(QtWidgets.QMainWindow, SetupTabMixin, LiveTabMixin, LogsTabMixin):
+class AdminLauncher(QtWidgets.QMainWindow, SetupTabMixin, LiveTabMixin, DatabaseTabMixin):
     def __init__(self):
         super().__init__()
 
@@ -119,7 +119,7 @@ class AdminLauncher(QtWidgets.QMainWindow, SetupTabMixin, LiveTabMixin, LogsTabM
 
         self.nav_list = QtWidgets.QListWidget()
         self.nav_list.setObjectName("NavList")
-        self.nav_list.addItems(["Setup", "Live", "Logs"])
+        self.nav_list.addItems(["Setup", "Live", "Database"])
         self.nav_list.setCurrentRow(0)
         sidebar_layout.addWidget(self.nav_list, 1)
 
@@ -149,14 +149,14 @@ class AdminLauncher(QtWidgets.QMainWindow, SetupTabMixin, LiveTabMixin, LogsTabM
 
         self.tab_setup = QtWidgets.QWidget()
         self.tab_live = QtWidgets.QWidget()
-        self.tab_logs = QtWidgets.QWidget()
+        self.tab_database = QtWidgets.QWidget()
         self.page_stack.addWidget(self.tab_setup)
         self.page_stack.addWidget(self.tab_live)
-        self.page_stack.addWidget(self.tab_logs)
+        self.page_stack.addWidget(self.tab_database)
 
         self._build_setup_tab()
         self._build_live_tab()
-        self._build_logs_tab()
+        self._build_database_tab()
 
         self.nav_list.currentRowChanged.connect(self.page_stack.setCurrentIndex)
 
@@ -508,6 +508,8 @@ class AdminLauncher(QtWidgets.QMainWindow, SetupTabMixin, LiveTabMixin, LogsTabM
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
+    hr_locale = QtCore.QLocale(QtCore.QLocale.Croatian, QtCore.QLocale.Croatia)
+    QtCore.QLocale.setDefault(hr_locale)
     app.setStyle("Fusion")
     palette = QtGui.QPalette()
     palette.setColor(QtGui.QPalette.Window, QtGui.QColor(THEME["bg_body"]))

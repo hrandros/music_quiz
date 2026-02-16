@@ -4,6 +4,7 @@ from config import Config
 from extensions import db, socketio
 from musicquiz.routes import register_routes
 from musicquiz.sockets import register_sockets
+from musicquiz import models as models_module
 import os
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -18,7 +19,7 @@ def create_app():
     db.init_app(app)
     socketio.init_app(app, cors_allowed_origins="*", async_mode="threading")
     with app.app_context():
-        from musicquiz import models 
+        _ = models_module.__name__
         db.create_all()
         print("Baza podataka i tablice su uspješno kreirani!")
     register_routes(app)

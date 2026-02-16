@@ -139,6 +139,18 @@ def build_styles(theme=None):
             background: {theme['primary_hover']};
             border: 1px solid {theme['primary_hover']};
         }}
+        QPushButton[modeToggle="true"][inactive="true"] {{
+            background: {theme['bg_hover']};
+            border: 1px solid {theme['border']};
+            color: {theme['muted']};
+        }}
+        QPushButton[modeToggle="true"][inactive="true"]:hover {{
+            background: {theme['bg_hover']};
+        }}
+        QPushButton[modeToggle="true"][inactive="true"]:pressed {{
+            background: {theme['surface_alt']};
+            border: 1px solid {theme['border']};
+        }}
         QPushButton:disabled {{
             background: {theme['bg_hover']};
             border: 1px solid {theme['border']};
