@@ -157,9 +157,13 @@ def auto_quiz_sequence(question_id, round_num, app):
             quiz_id=question.quiz_id,
             round_number=round_num
         ).count()
+        # 1. Ako je kviz pauziran prije početka pitanja, pričekaj nastavak
+        while quiz_settings.get("quiz_paused"):
+            time.sleep(0.2)
 
         # 1. EMITIRAJ POČETAK PJESME
         question_display = get_question_display(question)
+        started_at = time.time()
         socketio.emit("play_audio", {
             "url": media_url,
             "start": media_start,
@@ -177,7 +181,7 @@ def auto_quiz_sequence(question_id, round_num, app):
 
         # Send unlockInput with question type details
         unlock_payload = get_question_unlock_payload(question)
-        unlock_payload["question_started_at"] = time.time()
+        unlock_payload["question_started_at"] = started_at
         unlock_payload["question_duration"] = question.duration
 
         quiz_settings["current_question_id"] = question.id
@@ -460,7 +464,7 @@ def register_admin_events(socketio):
 
     @socketio.on("admin_request_grading")
     def handle_request_grading(data):
-        """Šalje grading podatke filtirane po runди."""
+        """Šalje grading podatke filtirane po rundi."""
         round_num = data.get("round", 1)
         quiz = get_active_quiz()
         if not quiz:

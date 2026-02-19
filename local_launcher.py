@@ -2,9 +2,10 @@ import os
 import subprocess
 import sys
 import threading
-
 import socketio
 from PySide6 import QtCore, QtGui, QtMultimedia, QtWidgets
+from PySide6.QtCore import QUrl, QSettings
+from PySide6.QtGui import QDesktopServices
 
 from admin_ui.constants import APP_HOST, APP_PORT, THEME
 from admin_ui.database_tab import DatabaseTabMixin
@@ -21,10 +22,12 @@ from musicquiz.models import LogEntry
 class AdminLauncher(QtWidgets.QMainWindow, SetupTabMixin, LiveTabMixin, DatabaseTabMixin):
     def __init__(self):
         super().__init__()
-
+        self.settings = QSettings("RockQuiz", "Admin")
+        self.ui_mode = str(self.settings.value("ui/mode", "dark"))
         self.app = create_app()
         self.sio = socketio.Client(reconnection=True)
         self.sio_connected = False
+        self.force_paused = False
         self.is_paused = False
         self.registrations_open = False
         self.next_round_ready = False
@@ -37,16 +40,31 @@ class AdminLauncher(QtWidgets.QMainWindow, SetupTabMixin, LiveTabMixin, Database
         self.player_status_cache = {}
         self.live_timer_remaining = None
         self.live_timer_total = None
-        self.live_player = QtMultimedia.QMediaPlayer(self)
         self.live_audio_output = QtMultimedia.QAudioOutput(self)
         self.live_audio_output.setVolume(0.7)
-        self.live_player.setAudioOutput(self.live_audio_output)
         self.live_media_seek_ms = None
+        self.live_pause_resume_pos_ms = None
+        self.live_player = QtMultimedia.QMediaPlayer(self)
+        self.live_player.setAudioOutput(self.live_audio_output)
         self.live_player.mediaStatusChanged.connect(self._on_live_media_status)
         self.live_player.errorOccurred.connect(self._on_live_media_error)
+        self.live_player.durationChanged.connect(self._on_live_duration_changed)
+        self.live_player.positionChanged.connect(self._on_live_position_changed)
+        self.live_player.mediaStatusChanged.connect(self._on_live_media_status)
         self.live_audio_stop_timer = QtCore.QTimer(self)
         self.live_audio_stop_timer.setSingleShot(True)
-        self.live_audio_stop_timer.timeout.connect(self.stop_live_media)
+        self.live_audio_stop_timer.timeout.connect(self._on_live_clip_timeout)
+        self.live_follow_server = True
+        self.live_playlist = []
+        self.live_playlist_index = -1
+        self.live_user_seeking = False
+        self.live_track_positions = {}
+        self.live_current_track_key = None
+        self.live_local_run = False
+        self.live_clip_remaining_ms = None
+        self.live_should_autoplay = False
+        self.live_autoplay_on_resume = False
+        self.live_pending_stop_ms = None
         self.port_input = QtWidgets.QSpinBox()
         self.port_input.setRange(1, 65535)
         self.port_input.setValue(APP_PORT)
@@ -76,7 +94,7 @@ class AdminLauncher(QtWidgets.QMainWindow, SetupTabMixin, LiveTabMixin, Database
 
         self._load_fonts()
         self._build_ui()
-        self._apply_styles()
+        self._apply_styles(self.ui_mode)
 
         self._bind_signals()
         self._bind_socket_events()
@@ -152,16 +170,11 @@ class AdminLauncher(QtWidgets.QMainWindow, SetupTabMixin, LiveTabMixin, Database
         sidebar_layout.addStretch(1)
 
         self.start_stop_btn = QtWidgets.QPushButton("Start Server")
-        self.start_stop_btn.clicked.connect(self.toggle_server)
+        self.start_stop_btn.clicked.connect(self.toggle_server)        
+        self.start_stop_btn.setProperty("accent", "green")
+        if hasattr(self, "_repolish"):
+            self._repolish(self.start_stop_btn)
         sidebar_layout.addWidget(self.start_stop_btn)
-
-        self.server_address = QtWidgets.QLabel(self._format_address_link())
-        self.server_address.setObjectName("StatusLabel")
-        self.server_address.setTextFormat(QtCore.Qt.RichText)
-        self.server_address.setTextInteractionFlags(QtCore.Qt.TextBrowserInteraction)
-        self.server_address.setOpenExternalLinks(True)
-        sidebar_layout.addWidget(self.server_address)
-
         root_layout.addWidget(sidebar)
 
         content = QtWidgets.QWidget()
@@ -186,6 +199,40 @@ class AdminLauncher(QtWidgets.QMainWindow, SetupTabMixin, LiveTabMixin, Database
         top_layout.addWidget(top_logo)
         top_layout.addWidget(top_title)
         top_layout.addStretch(1)
+        # ---- DESNI TOOLBAR U TOP BARU ----
+        self.live_toggle_btn = QtWidgets.QLabel("LIVE: Disconnected")
+        self.live_toggle_btn.setProperty("chip", "status")
+        self.live_toggle_btn.setProperty("state", "err")
+        self._repolish(self.live_toggle_btn)
+
+
+        self.tv_btn = QtWidgets.QPushButton("TV SCREEN")
+        self.tv_btn.setProperty("accent", "blue")
+        self.tv_btn.setProperty("size", "sm")
+        self.tv_btn.clicked.connect(self._open_tv_screen)
+
+        self.refresh_toolbar_btn = QtWidgets.QPushButton("REFRESH")
+        self.refresh_toolbar_btn.setProperty("variant", "outline")
+        self.refresh_toolbar_btn.setProperty("size", "sm")
+        self.refresh_toolbar_btn.clicked.connect(self.refresh_live)
+
+        self.theme_toggle = QtWidgets.QToolButton()
+        self.theme_toggle.setCheckable(True)
+        self.theme_toggle.setChecked(self.ui_mode == "light")
+        self.theme_toggle.setText("Dark" if self.ui_mode == "light" else "Light")
+        self.theme_toggle.toggled.connect(self._on_theme_toggled)
+
+        self._repolish(self.live_toggle_btn, self.tv_btn, self.refresh_toolbar_btn, self.theme_toggle)
+
+        actions_row = QtWidgets.QHBoxLayout()
+        actions_row.setContentsMargins(0, 0, 0, 0)
+        actions_row.setSpacing(8)
+        actions_row.addWidget(self.refresh_toolbar_btn)
+        actions_row.addWidget(self.live_toggle_btn)
+        actions_row.addWidget(self.tv_btn)
+        actions_row.addWidget(self.theme_toggle)
+
+        top_layout.addLayout(actions_row)
         content_layout.addWidget(top_bar)
 
         self.page_stack = QtWidgets.QStackedWidget()
@@ -208,8 +255,16 @@ class AdminLauncher(QtWidgets.QMainWindow, SetupTabMixin, LiveTabMixin, Database
         self.setCentralWidget(root)
         self._install_shadow_effects()
 
-    def _apply_styles(self):
-        self.setStyleSheet(build_styles(THEME))
+    def _apply_styles(self, mode="dark"):
+        """Primijeni QSS za zadani mode i osvježi toggle/pohranu."""
+        self.setStyleSheet(build_styles(THEME, mode=mode))
+        self.ui_mode = str(mode)
+        if hasattr(self, "theme_toggle"):
+            self.theme_toggle.blockSignals(True)
+            self.theme_toggle.setChecked(self.ui_mode == "light")
+            self.theme_toggle.setText("Dark" if self.ui_mode == "light" else "Light")
+            self.theme_toggle.blockSignals(False)
+        self.settings.setValue("ui/mode", self.ui_mode)
 
     def _switch_page(self, index):
         if index == self.page_stack.currentIndex():
@@ -259,14 +314,15 @@ class AdminLauncher(QtWidgets.QMainWindow, SetupTabMixin, LiveTabMixin, Database
         anim.start()
 
     def _bind_signals(self):
+        self.signals.live_status.connect(self._on_live_status_label)
         self.signals.log_line.connect(self.append_log)
-        self.signals.status_text.connect(self.server_status_label.setText)
-        self.signals.address_text.connect(self.server_address.setText)
         self.signals.live_status.connect(self.update_live_status)
         self.signals.players.connect(self.update_players)
         self.signals.leaderboard.connect(self.update_leaderboard)
         self.signals.grading.connect(self.update_grading)
         self.signals.pause_state.connect(self.update_pause_button)
+        if hasattr(self, "_on_quiz_pause_state_signal"):
+            self.signals.pause_state.connect(self._on_quiz_pause_state_signal)
         self.signals.round_countdown.connect(self._on_round_countdown_signal)
         self.signals.play_audio.connect(self._on_play_audio_signal)
         self.signals.timer_update.connect(self._on_timer_update_signal)
@@ -342,13 +398,6 @@ class AdminLauncher(QtWidgets.QMainWindow, SetupTabMixin, LiveTabMixin, Database
             QtCore.QTimer.singleShot(0, lambda: self._on_live_arm_ack(data))
             QtCore.QTimer.singleShot(0, lambda: self._store_log("socket", f"live_arm_ack:{data}"))
 
-        @self.sio.on("quiz_pause_state")
-        def on_pause(data):
-            self._log_socket_event("quiz_pause_state", data)
-            self.is_paused = bool(data.get("paused"))
-            self.signals.pause_state.emit(self.is_paused)
-            QtCore.QTimer.singleShot(0, lambda: self.set_live_audio_paused(self.is_paused))
-
         @self.sio.on("admin_live_guard_blocked")
         def on_guard(data):
             self.signals.live_guard_blocked.emit(data or {})
@@ -361,6 +410,23 @@ class AdminLauncher(QtWidgets.QMainWindow, SetupTabMixin, LiveTabMixin, Database
         def on_play_audio(data):
             self._log_socket_event("play_audio", data)
             self.signals.play_audio.emit(data or {})
+
+        @self.sio.on("quiz_pause_state")
+        def on_pause(data):
+            self._log_socket_event("quiz_pause_state", data)
+
+            paused = bool((data or {}).get("paused"))
+            self.is_paused = paused
+
+            print("RECV quiz_pause_state:", paused)
+
+            # prebaci u Qt thread
+            def apply_pause():
+                self.update_pause_button(paused)
+                self.signals.pause_state.emit(paused)
+
+            QtCore.QTimer.singleShot(0, apply_pause)
+
 
         @self.sio.on("timer_update")
         def on_timer_update(data):
@@ -479,17 +545,18 @@ class AdminLauncher(QtWidgets.QMainWindow, SetupTabMixin, LiveTabMixin, Database
             text=True
         )
         self.server_starting = True
-        self.registrations_open = False
+        self.registrations_open = True
         self.signals.status_text.emit("Running")
         self.signals.address_text.emit(self._format_address_link())
         self._sync_server_buttons(False)
         self.signals.log_line.emit("Server starting...")
         self._store_log("ui", "server_start")
         QtCore.QTimer.singleShot(5000, self._finish_startup_delay)
-
+        QtCore.QTimer.singleShot(5000, lambda: self.sio.emit("admin_toggle_registrations", {"open": True}))
         self.stop_monitor = False
         self.monitor_thread = threading.Thread(target=self.monitor_output, daemon=True)
         self.monitor_thread.start()
+
         QtCore.QTimer.singleShot(500, self.start_connect_retry)
 
     def monitor_output(self):
@@ -529,9 +596,65 @@ class AdminLauncher(QtWidgets.QMainWindow, SetupTabMixin, LiveTabMixin, Database
             if self.server_starting:
                 self.start_stop_btn.setText("Starting...")
                 self.start_stop_btn.setEnabled(False)
+                # neutralan izgled dok starta (bez accent varijante)
+                self.start_stop_btn.setProperty("accent", "")
+                if hasattr(self, "_repolish"):
+                    self._repolish(self.start_stop_btn)
                 return
-            self.start_stop_btn.setText("Stop Server" if running else "Start Server")
+
             self.start_stop_btn.setEnabled(True)
+
+            if running:
+                # SERVER RADI → STOP = CRVENO
+                self.start_stop_btn.setText("Stop Server")
+                self.start_stop_btn.setProperty("accent", "danger")
+            else:
+                # SERVER NE RADI → START = ZELENO
+                self.start_stop_btn.setText("Start Server")
+                self.start_stop_btn.setProperty("accent", "green")
+
+            # repolish da QSS odmah primijeni novu varijantu
+            if hasattr(self, "_repolish"):
+                self._repolish(self.start_stop_btn)
+
+    def _repolish(self, *widgets):
+        for w in widgets:
+            if not w:
+                continue
+            w.style().unpolish(w)
+            w.style().polish(w)
+            w.update()
+
+    def _on_theme_toggled(self, checked):
+        mode = "light" if checked else "dark"
+        self._apply_styles(mode=mode)
+
+    def _on_live_status_label(self, text):
+        try:
+            status = str(text or "").strip()
+            lower = status.lower()
+            is_connected = lower.startswith("connected")
+            suffix = " (paused)" if getattr(self, "is_paused", False) and is_connected else ""
+            label_text = "LIVE: {0}{1}".format(status, suffix)
+
+            if hasattr(self, "live_toggle_btn") and self.live_toggle_btn:
+                self.live_toggle_btn.setText(label_text)
+                self.live_toggle_btn.setProperty("chip", "status")
+                self.live_toggle_btn.setProperty("state", "ok" if is_connected else "err")
+                self.live_toggle_btn.setProperty("variant", "")
+                self.live_toggle_btn.setProperty("accent", "")
+                if hasattr(self, "_repolish"):
+                    self._repolish(self.live_toggle_btn)
+
+        except Exception:
+            pass
+
+    def _open_tv_screen(self):
+        try:
+            url = "{0}/screen".format(self.address_text())
+            QDesktopServices.openUrl(QUrl(url))
+        except Exception:
+            pass
 
     def _finish_startup_delay(self):
         self.server_starting = False
@@ -593,20 +716,21 @@ def main():
     hr_locale = QtCore.QLocale(QtCore.QLocale.Croatian, QtCore.QLocale.Croatia)
     QtCore.QLocale.setDefault(hr_locale)
     app.setStyle("Fusion")
-    palette = QtGui.QPalette()
-    palette.setColor(QtGui.QPalette.Window, QtGui.QColor(THEME["bg_body"]))
-    palette.setColor(QtGui.QPalette.WindowText, QtGui.QColor(THEME["text"]))
-    palette.setColor(QtGui.QPalette.Base, QtGui.QColor(THEME["surface"]))
-    palette.setColor(QtGui.QPalette.AlternateBase, QtGui.QColor(THEME["surface_alt"]))
-    palette.setColor(QtGui.QPalette.Text, QtGui.QColor(THEME["text"]))
-    palette.setColor(QtGui.QPalette.Button, QtGui.QColor(THEME["bg_card"]))
-    palette.setColor(QtGui.QPalette.ButtonText, QtGui.QColor(THEME["text"]))
-    palette.setColor(QtGui.QPalette.Highlight, QtGui.QColor(THEME["primary"]))
-    palette.setColor(QtGui.QPalette.HighlightedText, QtGui.QColor("#ffffff"))
-    app.setPalette(palette)
+    # palette = QtGui.QPalette()
+    # palette.setColor(QtGui.QPalette.Window, QtGui.QColor(THEME["bg_body"]))
+    # palette.setColor(QtGui.QPalette.WindowText, QtGui.QColor(THEME["text"]))
+    # palette.setColor(QtGui.QPalette.Base, QtGui.QColor(THEME["surface"]))
+    # palette.setColor(QtGui.QPalette.AlternateBase, QtGui.QColor(THEME["surface_alt"]))
+    # palette.setColor(QtGui.QPalette.Text, QtGui.QColor(THEME["text"]))
+    # palette.setColor(QtGui.QPalette.Button, QtGui.QColor(THEME["bg_card"]))
+    # palette.setColor(QtGui.QPalette.ButtonText, QtGui.QColor(THEME["text"]))
+    # palette.setColor(QtGui.QPalette.Highlight, QtGui.QColor(THEME["primary"]))
+    # palette.setColor(QtGui.QPalette.HighlightedText, QtGui.QColor("#ffffff"))
+    # app.setPalette(palette)
     window = AdminLauncher()
     window.show()
     sys.exit(app.exec())
+    
 
 
 if __name__ == "__main__":

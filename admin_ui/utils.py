@@ -1,6 +1,7 @@
 import os
 import re
 import socket
+import shutil
 
 from config import Config
 
@@ -29,7 +30,7 @@ def import_video_file(source_path: str, filename: str) -> str:
     destination = os.path.join(videos_dir, safe_name)
     if os.path.abspath(source_path) != os.path.abspath(destination):
         with open(source_path, "rb") as src, open(destination, "wb") as dst:
-            dst.write(src.read())
+            shutil.copyfileobj(src, dst, length=1024 * 1024)
     return safe_name
 
 

@@ -7,7 +7,6 @@ from .text_multiple import TextMultiple
 from .simultaneous import SimultaneousQuestion
 from .player import Player
 from .answer import Answer
-from .player_quiz import PlayerQuiz
 from .log_entry import LogEntry
 
 __all__ = [
@@ -20,6 +19,5 @@ __all__ = [
 	"SimultaneousQuestion",
 	"Player",
 	"Answer",
-	"PlayerQuiz",
 	"LogEntry",
 ]

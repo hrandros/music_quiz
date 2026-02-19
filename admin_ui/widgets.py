@@ -159,14 +159,24 @@ class WaveformWidget(QtWidgets.QWidget):
             chunks = np.array_split(abs_data, max_peaks)
             peaks = [float(chunk.max()) if chunk.size else 0.0 for chunk in chunks]
             max_peak = max(peaks) or 1.0
-            self._peaks = [p / max_peak for p in peaks]
-            self._sample_rate = int(sr or self._sample_rate)
-            self._post_to_main(self.update)
+            peaks_norm = [p / max_peak for p in peaks]
+            sr_int = int(sr or self._sample_rate)
+            self._post_to_main(lambda: self._apply_librosa_result(peaks_norm, sr_int))
             self._post_to_main(lambda: self._emit_load_finished(True))
         except Exception:
             if self._stop_decode:
                 return
             self._post_to_main(lambda: self._start_qt_decoder(path))
+
+
+    def _apply_librosa_result(self, peaks, sample_rate):
+        # Ensure widget state is mutated only on the Qt main thread.
+        self._peaks = list(peaks or [])
+        try:
+            self._sample_rate = int(sample_rate or self._sample_rate)
+        except (TypeError, ValueError):
+            pass
+        self.update()
 
     def _emit_load_finished(self, success):
         if self._load_finished_emitted:

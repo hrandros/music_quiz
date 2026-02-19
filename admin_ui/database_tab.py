@@ -6,7 +6,6 @@ from musicquiz.models import (
     Answer,
     LogEntry,
     Player,
-    PlayerQuiz,
     Question,
     Quiz,
     SimultaneousQuestion,
@@ -108,7 +107,6 @@ class DatabaseTabMixin:
             "TextMultiple": TextMultiple,
             "SimultaneousQuestion": SimultaneousQuestion,
             "Player": Player,
-            "PlayerQuiz": PlayerQuiz,
             "Answer": Answer,
             "LogEntry": LogEntry,
         }

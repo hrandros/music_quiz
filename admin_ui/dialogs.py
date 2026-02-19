@@ -519,7 +519,7 @@ class AudioQuestionEditorDialog(QtWidgets.QDialog):
         self._buttons.button(QtWidgets.QDialogButtonBox.Save).setText("Spremi")
         self._buttons.button(QtWidgets.QDialogButtonBox.Cancel).setText("Odustani")
         self._buttons.accepted.connect(self._save)
-        self._buttons.rejected.connect(self.reject)
+        self._buttons.rejected.connect(self._cancel)
         layout.addRow(self._buttons)
 
     def _save(self):
