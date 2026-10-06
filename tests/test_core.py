@@ -1,3 +1,4 @@
+import io
 import pytest
 from app import create_app
 from extensions import db
@@ -14,7 +15,7 @@ from musicquiz.services.question_service import (
     get_question_unlock_payload, get_question_answer_key
 )
 from musicquiz.services.quiz_service import get_active_quiz, recompute_scores
-from musicquiz.services.utils import clean_filename_to_title
+from musicquiz.services.utils import clean_filename_to_title, get_local_ip
 
 
 @pytest.fixture
@@ -67,6 +68,37 @@ class TestGradingService:
         ans_late = Answer(choice_selected=2, submission_time=10.0)
         assert grade_multiple_choice_with_time(ans_late, 2, 30.0) == 0.8
 
+    def test_manual_grade_override_preservation(self, app_instance):
+        quiz = Quiz(title="Override Test", is_active=True)
+        db.session.add(quiz)
+        db.session.commit()
+
+        question = Question(quiz_id=quiz.id, round_number=1, position=1, type="audio", duration=30.0)
+        db.session.add(question)
+        db.session.flush()
+
+        song = Song(question_id=question.id, filename="test.mp3", artist="Queen", title="Radio Ga Ga")
+        db.session.add(song)
+
+        ans = Answer(
+            player_name="Team Typo",
+            question_id=question.id,
+            artist_guess="Kween", # Wrong spelling
+            title_guess="Radio Gaga",
+            artist_points=1.0, # Host manually gave 1.0
+            title_points=1.0,
+            is_manually_graded=True
+        )
+        db.session.add(ans)
+        db.session.commit()
+
+        # Execute auto-grading
+        grade_answer_for_question(ans, question)
+
+        # Confirm manual override points were NOT overwritten by auto-grader
+        assert ans.artist_points == 1.0
+        assert ans.is_manually_graded is True
+
 
 class TestQuestionService:
     def test_get_question_display_and_payload(self, app_instance):
@@ -112,6 +144,11 @@ class TestQuizServiceAndUtils:
     def test_clean_filename_to_title(self):
         assert clean_filename_to_title("01-queen_we-will-rock-you.mp3") == "queen we will rock you"
 
+    def test_get_local_ip(self):
+        ip = get_local_ip()
+        assert isinstance(ip, str)
+        assert len(ip.split(".")) == 4
+
     def test_active_quiz_and_recompute_scores(self, app_instance):
         q1 = Quiz(title="Inactive Quiz", is_active=False)
         q2 = Quiz(title="Active Quiz", is_active=True)
@@ -133,3 +170,21 @@ class TestQuizServiceAndUtils:
         scores = recompute_scores()
         assert scores["Team Alpha"] == 3.5
         assert Player.query.filter_by(name="Team Alpha").first().score == 3.5
+
+
+class TestAdminRoutes:
+    def test_upload_video_endpoint(self, app_instance):
+        client = app_instance.test_client()
+
+        # Login session
+        with client.session_transaction() as sess:
+            sess["logged_in"] = True
+
+        data = {
+            "file": (io.BytesIO(b"fake video content"), "test_clip.mp4")
+        }
+        res = client.post("/admin/upload_video", data=data, content_type="multipart/form-data")
+        assert res.status_code == 200
+        json_data = res.get_json()
+        assert json_data["status"] == "ok"
+        assert json_data["filename"] == "test_clip.mp4"

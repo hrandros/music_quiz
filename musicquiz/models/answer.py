@@ -25,6 +25,7 @@ class Answer(db.Model):
     artist_points = db.Column(db.Float, default=0.0)      # Points for field 1
     title_points = db.Column(db.Float, default=0.0)       # Points for field 2
     extra_points = db.Column(db.Float, default=0.0)       # Points for field 3
+    is_manually_graded = db.Column(db.Boolean, default=False) # True if score host overridden
 
     # Timing
     is_locked = db.Column(db.Boolean, default=False)      # Whether answer is final

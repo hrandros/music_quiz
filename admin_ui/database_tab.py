@@ -59,6 +59,10 @@ class DatabaseTabMixin:
         refresh_btn = QtWidgets.QPushButton("Refresh")
         refresh_btn.clicked.connect(self.refresh_database_table)
         header.addWidget(refresh_btn)
+
+        export_btn = QtWidgets.QPushButton("Export JSON")
+        export_btn.clicked.connect(self.export_database_json)
+        header.addWidget(export_btn)
         header.addStretch(1)
 
         self.db_info_label = QtWidgets.QLabel("Rows: 0")
@@ -211,3 +215,40 @@ class DatabaseTabMixin:
         if hasattr(self, "db_info_label"):
             total_count = len(rows_data)
             self.db_info_label.setText(f"Rows: {visible_count}/{total_count}")
+
+    def export_database_json(self):
+        import json
+        model_name = self.db_table_combo.currentText()
+        columns = getattr(self, "db_columns", [])
+        rows_data = getattr(self, "db_rows_data", [])
+
+        if not columns or not rows_data:
+            QtWidgets.QMessageBox.warning(self, "Export", "Nema podataka za izvoz.")
+            return
+
+        export_records = []
+        for row_values in rows_data:
+            record = {}
+            for col_name, val in zip(columns, row_values):
+                record[col_name] = str(val) if val is not None else ""
+            export_records.append(record)
+
+        file_path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            f"Izvezi {model_name} (JSON)",
+            f"{model_name.lower()}_export.json",
+            "JSON Files (*.json)"
+        )
+        if not file_path:
+            return
+
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                json.dump(export_records, f, indent=2, ensure_ascii=False)
+            QtWidgets.QMessageBox.information(
+                self,
+                "Export",
+                f"Uspješno izvezeno {len(export_records)} zapisa u:\n{file_path}"
+            )
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, "Export Error", f"Greška pri izvozu: {str(e)}")

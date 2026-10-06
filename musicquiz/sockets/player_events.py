@@ -54,6 +54,9 @@ def register_player_events(socketio):
         from musicquiz.services.player_status import get_all_players_data
         socketio.emit("admin_update_player_list", get_all_players_data())
 
+        current_phase = quiz_settings.get("current_question_phase")
+        curr_q_id = quiz_settings.get("current_question_id")
+
         if active_state:
             question = Question.query.get(active_state["question_id"])
             if question:
@@ -62,6 +65,31 @@ def register_player_events(socketio):
                 payload["question_started_at"] = active_state["started_at"]
                 payload["question_duration"] = active_state["duration"]
                 emit("player_unlock_input", payload, to=request.sid)
+        elif current_phase == "answer" and curr_q_id:
+            question = Question.query.get(curr_q_id)
+            if question:
+                ans = Answer.query.filter_by(player_name=name, question_id=curr_q_id).first()
+                from musicquiz.services.question_service import get_question_answer_key
+                from musicquiz.sockets.admin_events import get_max_points
+                correct_answer = get_question_answer_key(question)
+                choices = []
+                if question.type == "text_multiple" and question.text_multiple:
+                    choices = question.text_multiple.get_choices()
+                player_answer = {
+                    "artist": ans.artist_guess or "" if ans else "",
+                    "title": ans.title_guess or "" if ans else "",
+                    "extra": getattr(ans, 'extra_guess', '') or "" if ans else "",
+                    "choice": getattr(ans, 'choice_selected', -1) or -1 if ans else -1
+                }
+                emit("player_show_answer", {
+                    "player_answer": player_answer,
+                    "correct_answer": correct_answer,
+                    "artist_points": float(ans.artist_points or 0) if ans else 0.0,
+                    "title_points": float(ans.title_points or 0) if ans else 0.0,
+                    "extra_points": float(ans.extra_points or 0) if ans else 0.0,
+                    "max_points": get_max_points(question),
+                    "choices": choices
+                }, to=request.sid)
 
     # ---------------------------
     # PLAYER ACTIVITY UPDATE

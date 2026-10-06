@@ -49,8 +49,8 @@ if __name__ == "__main__":
         print("server_stop", flush=True)
 
     atexit.register(_log_server_stop)
-    import socket
-    ip = socket.gethostbyname(socket.gethostname())
+    from musicquiz.services.utils import get_local_ip
+    ip = get_local_ip()
     host = os.getenv("MQ_HOST", "0.0.0.0")
     port = int(os.getenv("MQ_PORT", "5000"))
     debug = os.getenv("MQ_DEBUG", "0").lower() in {"1", "true", "yes"}

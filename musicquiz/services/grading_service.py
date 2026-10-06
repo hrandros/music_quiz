@@ -129,6 +129,9 @@ def grade_multiple_choice_with_time(ans, correct_choice_index, duration):
 
 
 def grade_answer_for_question(ans, question):
+    if getattr(ans, "is_manually_graded", False):
+        return
+
     if question.type == "text_multiple" and question.text_multiple:
         correct_idx = int(question.text_multiple.correct_index or 0)
         points = grade_multiple_choice_with_time(ans, correct_idx, float(question.duration or 0))

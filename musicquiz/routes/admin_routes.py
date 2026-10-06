@@ -368,6 +368,7 @@ def api_update_score():
         else:
             ans.extra_points = score_value
 
+        ans.is_manually_graded = True
         db.session.commit()
         return jsonify({"status": "ok"})
 
@@ -511,6 +512,33 @@ def create_multiple_choice_question():
         return jsonify({
             "status": "ok",
             "song": get_question_display(question)
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "msg": str(e)}), 500
+
+
+@admin_bp.route("/upload_video", methods=["POST"])
+@login_required
+def upload_video():
+    """Upload video file to videos directory."""
+    try:
+        if "file" not in request.files:
+            return jsonify({"status": "error", "msg": "No file uploaded"}), 400
+
+        file = request.files["file"]
+        if not file or file.filename == "":
+            return jsonify({"status": "error", "msg": "No file selected"}), 400
+
+        from admin_ui.utils import ensure_videos_dir
+        videos_dir = ensure_videos_dir()
+
+        filename = secure_filename(os.path.basename(file.filename))
+        destination = os.path.join(videos_dir, filename)
+        file.save(destination)
+
+        return jsonify({
+            "status": "ok",
+            "filename": filename
         })
     except Exception as e:
         return jsonify({"status": "error", "msg": str(e)}), 500

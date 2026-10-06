@@ -529,6 +529,7 @@ def register_admin_events(socketio):
             else:
                 ans.extra_points = score_value
 
+            ans.is_manually_graded = True
             db.session.commit()
             # Nakon ručne promjene bodova, odmah osvježi TV
             calculate_and_broadcast_leaderboard()
@@ -573,9 +574,8 @@ def register_admin_events(socketio):
         
         if quiz_settings["registrations_open"]:
             # Dohvati IP adresu servera za QR kod
-            import socket
-            hostname = socket.gethostname()
-            ip_address = socket.gethostbyname(hostname)
+            from musicquiz.services.utils import get_local_ip
+            ip_address = get_local_ip()
             # Možeš i hardkodirati ako server ima fiksni IP
             url = f"http://{ip_address}:5000/player"
             
